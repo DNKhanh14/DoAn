@@ -1,0 +1,105 @@
+/*
+ * web-responsive.css — CSS responsive cho trang khách hàng
+ * Barbershop Website
+ */
+
+/* =============================================
+   LARGE DESKTOP (≤ 1199px)
+   ============================================= */
+@media (max-width: 1199px) {
+    .home-section .carousel-caption h3 { font-size: 30px; }
+    .about_img { height: 380px; }
+}
+
+/* =============================================
+   TABLET (≤ 991px)
+   ============================================= */
+@media (max-width: 991px) {
+    /* Navbar: ẩn menu giữa, hiện nút toggle */
+    .header-section .mainmenu { display: none !important; }
+    .mob-menu-toggle { display: block !important; }
+
+    .home-section .carousel-item img { height: 60vh; }
+    .home-section .carousel-caption h3 { font-size: 24px; }
+    .home-section .carousel-caption p { font-size: 14px; }
+
+    .about_section { padding: 60px 0; }
+    .about_content { text-align: center !important; margin-bottom: 30px; }
+    .about_img { height: 280px; }
+
+    .services_section,
+    .gallery-section,
+    .team_section,
+    .pricing_section,
+    .contact-section { padding: 60px 0; }
+
+    .book_section { padding: 70px 0; }
+
+    .section_heading h2 { font-size: 28px; }
+
+    .footer_social { justify-content: flex-start; margin-top: 10px; }
+}
+
+/* =============================================
+   MOBILE LANDSCAPE (≤ 767px)
+   ============================================= */
+@media (max-width: 767px) {
+    .home-section .carousel-item img { height: 50vh; }
+    .home-section .carousel-caption { bottom: 10%; }
+    .home-section .carousel-caption h3 { font-size: 20px; }
+    .home-section .carousel-caption p { display: none; }
+
+    .about_img { display: none; }
+
+    .section_heading h2 { font-size: 24px; }
+
+    .book_content h2 { font-size: 24px; }
+
+    .book_section .col-md-6.offset-md-6 {
+        margin-left: 0;
+        max-width: 100%;
+        flex: 0 0 100%;
+    }
+
+    .contact-info { margin-bottom: 30px; }
+
+    .contact-form { padding: 24px 18px; }
+
+    .widget_section { padding: 50px 0 24px; }
+
+    .footer_social { justify-content: flex-start; }
+
+    .padd_col_res { margin-bottom: 16px; }
+    .sm-padding { padding: 8px; }
+
+    .gallery-column { padding: 3px; }
+}
+
+/* =============================================
+   MOBILE PORTRAIT (≤ 575px)
+   ============================================= */
+@media (max-width: 575px) {
+    .header-section { height: 60px; }
+    .header-height { height: 60px !important; }
+
+    .home-section .carousel-item img { height: 45vh; }
+    .home-section .carousel-caption h3 { font-size: 17px; }
+
+    .default_btn {
+        padding: 10px 20px;
+        font-size: 12px;
+    }
+
+    .service_box { padding: 24px 18px; }
+    .service_box i { font-size: 36px; }
+
+    .section_heading { margin-bottom: 32px; }
+    .section_heading h2 { font-size: 21px; }
+
+    .contact-info h2 { font-size: 22px; }
+
+    .price_wrap { padding: 20px 16px; }
+
+    .subscribe_form input.form_input,
+    .subscribe_form button.submit { border-radius: 4px; }
+}

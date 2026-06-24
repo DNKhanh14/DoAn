@@ -1,0 +1,238 @@
+/* HR Payroll UI */
+.hr-modern-page .hr-employee-link,
+.hr-detail-page .hr-employee-link {
+    color: #1e5bb8;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.hr-modern-page .hr-employee-link:hover,
+.hr-detail-page .hr-employee-link:hover {
+    text-decoration: underline;
+}
+
+.hr-modal .modal-content {
+    border-radius: 8px;
+    border: none;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.hr-modal .modal-header {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 1rem 1.25rem;
+}
+
+.hr-modal .modal-title {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.hr-modal .modal-footer {
+    border-top: 1px solid #e5e7eb;
+}
+
+.hr-form-row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 12px;
+    align-items: start;
+    margin-bottom: 1rem;
+}
+
+.hr-form-row .hr-label {
+    text-align: right;
+    padding-top: 0.45rem;
+    margin: 0;
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+.hr-toggle-group {
+    display: flex;
+    gap: 0;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.hr-toggle-btn {
+    flex: 1;
+    border: none;
+    background: #fff;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.85rem;
+    color: #374151;
+    cursor: pointer;
+    border-right: 1px solid #d1d5db;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.hr-toggle-btn:last-child {
+    border-right: none;
+}
+
+.hr-toggle-btn.active {
+    color: #1e5bb8;
+    background: #eff6ff;
+    box-shadow: inset 0 0 0 2px #1e5bb8;
+    font-weight: 600;
+}
+
+.hr-check {
+    font-size: 0.9rem;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.hr-leave-count {
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+.hr-leave-count strong {
+    color: #dc2626;
+}
+
+.hr-amount-wrap {
+    position: relative;
+}
+
+.hr-amount-badge {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #1e5bb8;
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    pointer-events: none;
+}
+
+.hr-amount-wrap input {
+    padding-right: 90px;
+}
+
+/* Detail page */
+.hr-detail-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 1.25rem;
+}
+
+.hr-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.hr-employee-select {
+    min-width: 180px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.hr-summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.hr-summary-col {
+    font-size: 0.9rem;
+    line-height: 1.8;
+    color: #374151;
+}
+
+.hr-summary-totals {
+    text-align: right;
+    min-width: 140px;
+}
+
+.hr-total-item {
+    margin-bottom: 0.35rem;
+}
+
+.hr-total-item span {
+    display: block;
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+
+.hr-total-item strong {
+    font-size: 1rem;
+    color: #111827;
+}
+
+.hr-net-salary strong {
+    font-size: 1.5rem;
+    color: #1e5bb8;
+}
+
+.hr-tab-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.hr-tab-link {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    color: #6b7280;
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.hr-tab-link:hover {
+    color: #1e5bb8;
+}
+
+.hr-tab-link.active {
+    color: #1e5bb8;
+    border-bottom-color: #1e5bb8;
+    font-weight: 600;
+}
+
+.hr-table-footer {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #f3f4f6;
+}
+
+@media (max-width: 992px) {
+    .hr-summary-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .hr-summary-totals {
+        grid-column: 1 / -1;
+        text-align: left;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .hr-form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .hr-form-row .hr-label {
+        text-align: left;
+        padding-top: 0;
+    }
+}
+
+@media (max-width: 576px) {
+    .hr-summary-grid {
+        grid-template-columns: 1fr;
+    }
+}

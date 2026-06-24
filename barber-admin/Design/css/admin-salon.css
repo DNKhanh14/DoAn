@@ -1,0 +1,169 @@
+/* Giao diện admin kiểu EasySalon - có thể chỉnh màu tại đây */
+:root {
+    --salon-sidebar: #1e5bb8;
+    --salon-sidebar-hover: #164a9a;
+    --salon-accent: #2563eb;
+}
+
+body { font-family: 'Nunito', sans-serif; }
+
+.sidebar.salon-sidebar {
+    background: var(--salon-sidebar) !important;
+    background-image: none !important;
+}
+
+.sidebar.salon-sidebar .sidebar-brand {
+    padding: 1rem;
+    height: auto;
+}
+
+.sidebar.salon-sidebar .nav-link {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-size: 0.95rem;
+    padding: 0.75rem 1rem;
+}
+
+.sidebar.salon-sidebar .nav-link:hover {
+    background: var(--salon-sidebar-hover);
+    color: #fff !important;
+}
+
+.sidebar.salon-sidebar .nav-item.active > .nav-link,
+.sidebar.salon-sidebar .nav-link.active {
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: #fff !important;
+    font-weight: 700;
+    border-left: 4px solid #ffd943;
+}
+
+.sidebar.salon-sidebar .sidebar-heading {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+}
+
+.sidebar.salon-sidebar .collapse-inner .collapse-item {
+    color: #333;
+    font-size: 0.85rem;
+}
+
+.sidebar.salon-sidebar .collapse-inner .collapse-item.active {
+    background: #e8f0fe;
+    color: var(--salon-accent);
+    font-weight: 600;
+}
+
+.salon-logo-wrap img {
+    max-height: 48px;
+    border-radius: 50%;
+    background: #fff;
+    padding: 4px;
+}
+
+.topbar-salon {
+    background: #fff !important;
+    border-bottom: 1px solid #e3e6f0;
+    padding: 0.5rem 1rem;
+}
+
+.topbar-salon .salon-search-form {
+    max-width: 520px;
+    flex: 1;
+}
+
+.topbar-salon .salon-search-form .form-control {
+    border-radius: 4px 0 0 4px;
+    border-right: 0;
+}
+
+.topbar-salon .salon-search-form .btn-search {
+    background: var(--salon-accent);
+    color: #fff;
+    border-radius: 0 4px 4px 0;
+}
+
+.btn-view-site {
+    background: #22c55e;
+    color: #fff !important;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.btn-view-site:hover {
+    background: #16a34a;
+    color: #fff !important;
+}
+
+.page-title-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.page-title-bar h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #253246;
+    margin: 0;
+}
+
+.btn-them-moi {
+    background: var(--salon-accent);
+    color: #fff;
+    border: none;
+    padding: 0.45rem 1.1rem;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.btn-them-moi:hover {
+    background: #1d4ed8;
+    color: #fff;
+}
+
+.card-salon {
+    border: none;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.1);
+    border-radius: 6px;
+}
+
+.card-salon .card-header {
+    background: #fff;
+    border-bottom: 1px solid #e3e6f0;
+    font-weight: 700;
+    color: #253246;
+}
+
+.table-salon thead th {
+    background: #f8f9fc;
+    color: #5a5c69;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    border-bottom: 2px solid #e3e6f0;
+    white-space: nowrap;
+}
+
+.table-salon td {
+    vertical-align: middle;
+    font-size: 0.9rem;
+}
+
+.badge-co-hang { background: #d1fae5; color: #065f46; }
+.badge-het-hang { background: #fee2e2; color: #991b1b; }
+
+.btn-action-sm {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    line-height: 32px;
+    text-align: center;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.btn-sua { background: #fbbf24; color: #fff; }
+.btn-xem { background: #22c55e; color: #fff; }
+.btn-xoa { background: #ef4444; color: #fff; }

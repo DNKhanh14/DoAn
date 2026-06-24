@@ -1,0 +1,215 @@
+.booking-list-page .booking-filter-row {
+    display: grid;
+    grid-template-columns: auto auto 160px 170px auto 1fr;
+    gap: 8px;
+    align-items: center;
+}
+
+.booking-list-page .card-header {
+    background: #fff;
+}
+
+.booking-list-page .table td,
+.booking-list-page .table th {
+    font-size: 0.85rem;
+}
+
+.booking-list-page .badge-light {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.hr-modern-page .table td,
+.hr-modern-page .table th {
+    vertical-align: middle;
+}
+
+.hr-modern-page .btn-link {
+    padding: 0 0.4rem;
+    color: #1e5bb8;
+}
+
+@media (max-width: 992px) {
+    .booking-list-page .booking-filter-row {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* EasySalon-style CRM & Reports */
+.easy-page-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 1rem;
+}
+
+.easy-page-head h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0;
+    color: #111827;
+}
+
+.easy-page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.easy-panel {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.easy-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 1rem;
+    align-items: center;
+}
+
+.crm-page-head {
+    margin-bottom: 1rem;
+}
+
+.crm-page-head .crm-page-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0 0 12px;
+    color: #111827;
+}
+
+.crm-head-toolbar {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 10px;
+    width: 100%;
+}
+
+.crm-search-form {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+}
+
+.crm-btn-add {
+    white-space: nowrap;
+}
+
+.crm-search-form .input-group-text {
+    border-right: 0;
+}
+
+.crm-search-form .form-control {
+    border-left: 0;
+}
+
+.crm-search-form .form-control:focus {
+    box-shadow: none;
+    border-color: #ced4da;
+}
+
+.easy-table {
+    margin-bottom: 0;
+}
+
+.easy-table thead th {
+    background: #f8fafc;
+    border-top: none;
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.8rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.easy-table tbody td {
+    vertical-align: middle;
+    border-top: 1px solid #f1f5f9;
+    font-size: 0.875rem;
+}
+
+.easy-link {
+    color: #2563eb;
+    font-weight: 500;
+}
+
+.easy-link:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.reports-date-form {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.reports-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    gap: 4px;
+}
+
+.reports-tabs li a {
+    display: block;
+    padding: 0.65rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-decoration: none;
+}
+
+.reports-tabs li.active a {
+    color: #2563eb;
+    border-bottom: 2px solid #2563eb;
+    margin-bottom: -1px;
+}
+
+.reports-summary-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 1rem;
+}
+
+.reports-stat-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    text-align: center;
+}
+
+.reports-stat-card .label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #6b7280;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.35rem;
+}
+
+.reports-stat-card .value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #1e3a8a;
+}
+
+.reports-stat-card-tax .value {
+    color: #dc2626;
+}
+
+@media (max-width: 992px) {
+    .reports-summary-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

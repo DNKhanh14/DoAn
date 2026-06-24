@@ -1,0 +1,210 @@
+.reports-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 1rem;
+}
+
+.reports-toolbar-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+}
+
+.reports-filter-select {
+    max-width: 200px;
+    min-width: 140px;
+    flex: 1 1 140px;
+}
+
+.reports-cashflow-toolbar {
+    align-items: stretch;
+}
+
+.reports-cashflow-toolbar .reports-filter-select {
+    flex: 1 1 160px;
+    max-width: none;
+}
+
+.reports-table-footer {
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+    border-top: 1px solid #f1f5f9;
+}
+
+.reports-total-row td {
+    background: #f8fafc;
+}
+
+.reports-cashflow-formula {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 1.25rem;
+    width: 100%;
+}
+
+.reports-formula-op {
+    font-size: 1.75rem;
+    font-weight: 300;
+    color: #9ca3af;
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 0 4px;
+}
+
+.reports-cashflow-formula .reports-stat-card {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+    text-align: center;
+}
+
+.reports-cashflow-formula .reports-stat-card .value {
+    font-size: 1.35rem;
+}
+
+@media (max-width: 768px) {
+    .reports-cashflow-formula {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .reports-cashflow-formula .reports-stat-card {
+        flex: 1 1 100%;
+        max-width: 320px;
+    }
+}
+
+/* Order detail */
+.order-detail-page {
+    max-width: 1100px;
+}
+
+.order-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 1rem;
+}
+
+.order-detail-head h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.order-detail-back {
+    color: #374151;
+    font-size: 1.1rem;
+    text-decoration: none;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.order-detail-back:hover {
+    background: #f9fafb;
+    color: #111827;
+}
+
+.order-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: #374151;
+}
+
+.order-detail-panel {
+    padding: 0;
+    overflow: hidden;
+}
+
+.order-items-table thead th {
+    font-size: 0.75rem;
+}
+
+.order-staff-name {
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.order-staff-comm {
+    color: #2563eb;
+}
+
+.order-detail-bottom {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 1.5rem;
+    padding: 1.25rem;
+    border-top: 1px solid #f1f5f9;
+}
+
+.order-payment-box {
+    background: #eff6ff;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    font-size: 0.9rem;
+}
+
+.order-payment-title {
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+
+.order-totals {
+    text-align: right;
+}
+
+.order-total-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 2rem;
+    margin-bottom: 0.35rem;
+    font-size: 0.9rem;
+}
+
+.order-total-row.order-paid strong {
+    font-size: 1.1rem;
+}
+
+.order-paid-time {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    margin-top: 0.25rem;
+}
+
+.order-detail-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+    .order-detail-bottom {
+        grid-template-columns: 1fr;
+    }
+
+    .order-totals {
+        text-align: left;
+    }
+}
+
+@media (max-width: 992px) {
+    .reports-toolbar-actions {
+        margin-left: 0;
+        width: 100%;
+    }
+}
