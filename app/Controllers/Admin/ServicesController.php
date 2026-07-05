@@ -12,8 +12,14 @@ class ServicesController extends AdminController
 
     public function index(): void
     {
+        $this->requirePermission('services');
         $pageTitle = 'Dịch vụ';
         $do = $_GET['do'] ?? 'Manage';
+
+        // Read-only roles chỉ được xem danh sách
+        if ($this->isReadOnly()) {
+            $do = 'Manage';
+        }
 
         if (!in_array($do, ['Manage', 'Add', 'Edit', 'AddCategory', 'EditCategory'], true)) {
             $do = 'Manage';
@@ -33,6 +39,7 @@ class ServicesController extends AdminController
     {
         ob_start();
         $this->requireAuth();
+        $this->requireWritePermission();
 
         if (($_POST['do'] ?? '') === 'Delete') {
             $id = (int) ($_POST['ma_dich_vu'] ?? $_POST['service_id'] ?? 0);
@@ -67,6 +74,7 @@ class ServicesController extends AdminController
             'services'    => $q !== '' ? $svcModel->searchWithCategories($q) : $svcModel->getAllWithCategories(),
             'categories'  => $catModel->getAll(),
             'searchQuery' => $q,
+            'readOnly'    => $this->isReadOnly(),
         ], true);
     }
 

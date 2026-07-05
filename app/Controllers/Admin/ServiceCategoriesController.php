@@ -11,6 +11,7 @@ class ServiceCategoriesController extends AdminController
 
     public function index(): void
     {
+        $this->requirePermission('services');
         $pageTitle = 'Danh mục dịch vụ';
         $model     = new ServiceCategory();
 

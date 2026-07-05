@@ -11,6 +11,11 @@ define('ADMIN_PATH', ROOT_PATH . '/barber-admin');
 // Tắt display_errors để tránh PHP warning làm hỏng JSON response
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
+ini_set('default_charset', 'UTF-8');
+mb_internal_encoding('UTF-8');
+
+// Múi giờ Việt Nam — bắt buộc đặt trước mọi lời gọi date()
+date_default_timezone_set('Asia/Ho_Chi_Minh');
 
 // Composer autoloader (PHPMailer và các thư viện khác)
 if (file_exists(ROOT_PATH . '/vendor/autoload.php')) {
@@ -23,6 +28,7 @@ require APP_PATH . '/Core/Autoloader.php';
 require APP_PATH . '/Helpers/helpers.php';
 require APP_PATH . '/Helpers/salon.php';
 require APP_PATH . '/Helpers/MailService.php';
+require APP_PATH . '/Helpers/pagination.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

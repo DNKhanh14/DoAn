@@ -170,14 +170,22 @@
 <div class="bk-card">
   <div class="bk-card-hd">
     <div class="bk-card-ic"><i class="fas fa-user-tie"></i></div>
-    <div><div class="bk-card-ti">Chọn nhân viên</div><div class="bk-card-sb">Chọn người thợ bạn muốn phục vụ</div></div>
+    <div>
+      <div class="bk-card-ti">Chọn nhân viên</div>
+      <div class="bk-card-sb">Chọn người thợ bạn muốn phục vụ</div>
+    </div>
+    <!-- Nút chọn thợ ngẫu nhiên -->
+    <button type="button" id="btn-random-staff" onclick="bkRandomStaff()"
+            style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;padding:8px 16px;font-size:13px;font-weight:600;background:#f0f9ff;color:#1278aa;border:1.5px solid #b3dff5;border-radius:8px;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0">
+      <i class="fas fa-random"></i> Chọn thợ ngẫu nhiên
+    </button>
   </div>
   <div class="bk-err" id="err2"><i class="fas fa-exclamation-circle"></i> Vui lòng chọn nhân viên!</div>
   <div class="bk-sg">
     <?php foreach($employees as $e):
       $av=mb_strtoupper(mb_substr($e['ten'],0,1,'UTF-8').mb_substr($e['ho_dem'],0,1,'UTF-8'));
     ?>
-    <div class="bk-sc" onclick="bkStaff(this)">
+    <div class="bk-sc" onclick="bkStaff(this)" data-id="<?=(int)$e['ma_nhan_vien']?>">
       <input type="radio" name="selected_employee" value="<?=(int)$e['ma_nhan_vien']?>" class="bk-hr">
       <div class="bk-av"><?=htmlspecialchars($av)?></div>
       <div class="bk-stnm"><?=htmlspecialchars($e['ten'].' '.$e['ho_dem'])?></div>
@@ -226,13 +234,25 @@
       <input type="email" name="client_email" id="inp_email" class="bk-in" placeholder="example@email.com">
       <span class="bk-fe" id="fe3">Email không hợp lệ</span>
     </div>
-    <div class="bk-fgi">
+    <div class="bk-fgi" style="flex-basis:100%">
       <label class="bk-lb">Số điện thoại <span class="bk-req">*</span></label>
-      <input type="text" name="client_phone_number" id="inp_phone" class="bk-in" placeholder="09xxxxxxxx">
+      <div style="position:relative">
+        <input type="text" name="client_phone_number" id="inp_phone" class="bk-in" placeholder="09xxxxxxxx"
+               oninput="bkPhoneLookup(this.value)" autocomplete="tel"
+               style="padding-right:110px">
+        <span id="phone-lookup-status"
+              style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:12px;color:#6b8ea8;pointer-events:none;display:none"></span>
+      </div>
       <span class="bk-fe" id="fe4">Số điện thoại không hợp lệ (10 chữ số)</span>
     </div>
   </div>
-  <div class="bk-note"><i class="fas fa-shield-alt"></i> Thông tin của bạn được bảo mật và chỉ dùng để xác nhận lịch hẹn.</div>
+  <div class="bk-note">
+    <i class="fas fa-shield-alt"></i>
+    <span>
+      Thông tin của bạn được bảo mật và chỉ dùng để xác nhận lịch hẹn.
+      <br><strong style="color:#1278aa">Nếu bạn đã đặt lịch trước, hãy nhập số điện thoại — thông tin sẽ tự động điền.</strong>
+    </span>
+  </div>
 </div>
 </div>
 
@@ -419,6 +439,93 @@
     document.querySelectorAll('#bk-app .bk-sc').forEach(function(c){ c.classList.remove('sel'); });
     card.classList.add('sel');
     card.querySelector('.bk-hr').checked=true;
+  };
+
+  /* ── Chọn thợ ngẫu nhiên (ưu tiên thợ ít lịch nhất) ── */
+  window.bkRandomStaff = function(){
+    var btn = document.getElementById('btn-random-staff');
+    if(btn){
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang chọn...';
+    }
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '<?=base_url('index.php?url=random-staff')?>', true);
+    xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
+    xhr.onload = function(){
+      if(btn){
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-random"></i> Chọn thợ ngẫu nhiên';
+      }
+      if(xhr.status !== 200){ return; }
+      try{
+        var data = JSON.parse(xhr.responseText);
+        if(data.error){ return; }
+        // Tìm card có data-id tương ứng và chọn nó
+        var cards = document.querySelectorAll('#tab_employees .bk-sc');
+        var found = false;
+        cards.forEach(function(card){
+          if(parseInt(card.getAttribute('data-id')) === data.ma_nhan_vien){
+            bkStaff(card);
+            card.scrollIntoView({behavior:'smooth', block:'center'});
+            // Hiệu ứng nhấp nháy để người dùng biết thợ nào được chọn
+            card.style.boxShadow = '0 0 0 4px rgba(26,155,215,.5)';
+            setTimeout(function(){ card.style.boxShadow = ''; }, 1200);
+            found = true;
+          }
+        });
+        // Ẩn lỗi nếu có
+        var err2 = document.getElementById('err2');
+        if(err2) err2.style.display = 'none';
+      }catch(e){}
+    };
+    xhr.onerror = function(){
+      if(btn){
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-random"></i> Chọn thợ ngẫu nhiên';
+      }
+    };
+    xhr.send('');
+  };
+
+  /* ── Tra cứu khách hàng theo SĐT ── */
+  var phoneTimer = null;
+  window.bkPhoneLookup = function(val){
+    clearTimeout(phoneTimer);
+    var status = document.getElementById('phone-lookup-status');
+    val = val.replace(/\D/g,'');
+    if(val.length !== 10){
+      if(status) status.style.display = 'none';
+      return;
+    }
+    if(status){ status.style.display = 'inline'; status.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang tìm...'; }
+    phoneTimer = setTimeout(function(){
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST','<?=base_url('index.php?url=lookup-client')?>',true);
+      xhr.setRequestHeader('Content-Type','application/x-www-form-urlencoded');
+      xhr.onload = function(){
+        if(xhr.status !== 200){ if(status) status.style.display='none'; return; }
+        try{
+          var d = JSON.parse(xhr.responseText);
+          if(d.found){
+            var fname = document.getElementById('inp_fname');
+            var lname = document.getElementById('inp_lname');
+            var email = document.getElementById('inp_email');
+            if(fname && !fname.value) fname.value = d.ho;
+            if(lname && !lname.value) lname.value = d.ten;
+            if(email && !email.value) email.value = d.email;
+            // Nếu ô nào đã có giá trị → cũng ghi đè để đồng bộ
+            if(fname) fname.value = d.ho;
+            if(lname) lname.value = d.ten;
+            if(email) email.value = d.email;
+            if(status){ status.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a"></i> Đã tìm thấy'; }
+          } else {
+            if(status){ status.innerHTML = '<i class="fas fa-user-plus" style="color:#6b8ea8"></i> Khách mới'; }
+          }
+        }catch(e){ if(status) status.style.display='none'; }
+      };
+      xhr.onerror = function(){ if(status) status.style.display='none'; };
+      xhr.send('phone='+encodeURIComponent(val));
+    }, 500);
   };
 
 })();

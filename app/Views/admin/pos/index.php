@@ -93,12 +93,12 @@ $employeesJson = json_encode(array_map(static function ($e) {
 
         <div class="pos-catalog-panel">
             <div class="pos-catalog-search">
-                <input type="text" id="posCatalogSearch" placeholder="Tìm kiếm dịch vụ, sản phẩm hoặc gói...">
+                <input type="text" id="posCatalogSearch" placeholder="Tìm kiếm dịch vụ, sản phẩm hoặc ...">
             </div>
             <div class="pos-catalog-tabs">
                 <button type="button" class="active" data-catalog-tab="services">Dịch vụ</button>
                 <button type="button" data-catalog-tab="products">Sản phẩm</button>
-                <button type="button" data-catalog-tab="packages">Gói/Liệu trình</button>
+
             </div>
             <div class="pos-catalog-list">
                 <div data-catalog-pane="services">
@@ -147,14 +147,9 @@ $employeesJson = json_encode(array_map(static function ($e) {
                         <p class="text-muted p-3 small">Chưa có sản phẩm. Thêm tại Kho hàng.</p>
                     <?php endif; ?>
                 </div>
-                <div data-catalog-pane="packages" style="display:none">
-                    <p class="text-muted p-3 small">Gói liệu trình: quản lý tại Khách hàng → Hồ sơ → Gói dịch vụ (sắp có).</p>
-                </div>
+               
             </div>
-            <div class="pos-catalog-footer">
-                <button type="button" class="pos-btn-other">+ Thu khác</button>
-                <button type="button" class="pos-btn-card">Bán/nạp thẻ</button>
-            </div>
+            
         </div>
     </div>
 </div>
@@ -163,13 +158,18 @@ $employeesJson = json_encode(array_map(static function ($e) {
 <div class="modal fade" id="posStaffModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
         <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title">Chọn nhân viên</h5><button type="button" class="close" data-dismiss="modal">&times;</button></div>
-            <div class="modal-body">
-                <select class="form-control" id="posStaffSelect"></select>
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-users mr-2"></i>Xếp nhân viên</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body py-2" id="posStaffCheckboxList">
+                <!-- JS render danh sách checkbox -->
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Hủy</button>
-                <button type="button" class="btn btn-primary" id="posStaffSave">Áp dụng</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary btn-sm" id="posStaffSave">
+                    <i class="fas fa-check mr-1"></i>Áp dụng
+                </button>
             </div>
         </div>
     </div>
@@ -192,7 +192,6 @@ $employeesJson = json_encode(array_map(static function ($e) {
                     <label>Ghi chú</label>
                     <input type="text" class="form-control" id="posPayNote" placeholder="Ghi chú hóa đơn">
                 </div>
-                <label><input type="checkbox" id="posDeductMaterials" checked> Tự trừ kho nguyên vật liệu (dịch vụ)</label>
                 <label class="d-block mt-2"><input type="checkbox" id="posAutoPrint" checked> In hóa đơn sau khi thanh toán</label>
             </div>
             <div class="modal-footer">
@@ -211,6 +210,5 @@ window.POS_CONFIG = {
     prefill: <?= json_encode($prefill ?? null, JSON_UNESCAPED_UNICODE) ?>
 };
 </script>
-<script src="Design/js/pos.js"></script>
 
 <?php endif; ?>

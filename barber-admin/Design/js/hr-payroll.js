@@ -90,6 +90,17 @@
             if (badge) badge.textContent = fmt(extra.net || 0);
             if (remaining) remaining.value = fmt(extra.remaining || 0);
             cfg.netSalary = extra.net || 0;
+            // Click badge → điền nhanh số tiền vào ô
+            if (badge) {
+                badge.onclick = function() {
+                    const amtEl = document.getElementById('hrPaymentAmount');
+                    if (amtEl) {
+                        const val = Math.round(Number(extra.net) || 0);
+                        amtEl.value = val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                        amtEl.dispatchEvent(new Event('input'));
+                    }
+                };
+            }
         }
 
         if (modalId === 'hrSettingsModal' && extra) {

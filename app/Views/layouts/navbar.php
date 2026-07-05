@@ -1,6 +1,5 @@
 
-    
-    <!-- BẮT ĐẦU THANH ĐIỀU HƯỚNG -->
+
 
     <header id="header" class="header-section">
         <div class="container">
@@ -39,61 +38,4 @@
 
     <div class="header-height" style="height:80px;"></div>
 
-    <!-- KẾT THÚC THANH ĐIỀU HƯỚNG -->
-
-    <!-- BẮT ĐẦU THANH ĐIỀU HƯỚNG MOBILE -->
     
-    <div id="menu_mobile" class="menu-mobile-menu-container">
-        <ul class="mob-menu-top">
-            <li class="menu-header">
-                <a href="#">TRÌNH ĐƠN</a>
-            </li>
-            <li style="display: inline-block;">
-                <a class="mob-close-toggle" style="cursor: pointer;width: 75px;">
-                    <i class="fas fa-times" style="color: white;"></i>
-                </a>
-            </li>
-        </ul>
-        <div class="menu-tab-div">
-            <ul id="mobile-menu" class="menu">
-                <li>
-                    <a href="index.php#home-section" class="a-mob-menu">
-                        Trang chủ
-                    </a>
-                </li>
-                <li>
-                    <a href="index.php#about" class="a-mob-menu">
-                        Giới thiệu
-                    </a>
-                </li>
-                <li>
-                    <a href="index.php#services" class="a-mob-menu">
-                        Dịch vụ
-                    </a>
-                </li>
-                <li>
-                    <a href="<?= base_url('index.php?url=appointment') ?>" class="a-mob-menu">
-                        Đặt lịch ngay
-                    </a>
-                </li>
-                <li>
-                    <a href="index.php#gallery" class="a-mob-menu">
-                        Thư viện ảnh
-                    </a>
-                </li>
-                <li>
-                    <a href="index.php#pricing" class="a-mob-menu">
-                        Bảng giá
-                    </a>
-                </li>
-                <li>
-                    <a href="index.php#contact-us" class="a-mob-menu">
-                        Liên hệ
-                    </a>
-                </li>
-
-            </ul>
-        </div>
-    </div>
-
-    <!-- KẾT THÚC THANH ĐIỀU HƯỚNG MOBILE -->

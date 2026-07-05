@@ -8,9 +8,12 @@ class CrmController extends AdminController
 {
     public function index(): void
     {
-        $pageTitle = 'Khách hàng';
+        $this->requirePermission('crm');
+        $pageTitle   = 'Khách hàng';
         $searchQuery = trim($_GET['q'] ?? '');
-        $message = null;
+        $page        = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage     = max(5, min(100, (int) ($_GET['per_page'] ?? 20)));
+        $message     = null;
 
         // Xử lý xóa khách từ danh sách
         if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_client_id'])) {
@@ -20,11 +23,15 @@ class CrmController extends AdminController
             exit;
         }
 
-        $clients = $searchQuery !== ''
-            ? (new Client())->search($searchQuery, 100)
-            : (new Client())->getAll();
+        $model      = new Client();
+        $totalItems = $model->count($searchQuery);
+        $pag        = paginate($totalItems, $page, $perPage);
+        $pag['total'] = $totalItems;
+        $clients    = $model->getPaginated($pag['offset'], $perPage, $searchQuery);
 
-        $this->adminView('crm/index', compact('pageTitle', 'clients', 'searchQuery'));
+        $baseUrl = admin_route('crm') . ($searchQuery !== '' ? '&q=' . urlencode($searchQuery) : '');
+
+        $this->adminView('crm/index', compact('pageTitle', 'clients', 'searchQuery', 'pag', 'baseUrl'));
     }
 
     public function detail(): void

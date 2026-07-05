@@ -448,9 +448,9 @@
                             Giờ mở cửa
                         </h3>
                         <ul class="opening_time">
-                            <li>Thứ 2 - Thứ 6: 8:00 - 20:00</li>
+                            <li>Thứ 2 - Thứ 6: 9:00 - 19:45</li>
                            
-                            <li>thứ 7 - Chủ nhật: 8:00 - 19:00</li>
+                            <li>Thứ 7 - Chủ nhật: 9:00 - 20:30</li>
                             <li>Lễ/Tết: theo thông báo</li>
                         </ul>
                     </div>

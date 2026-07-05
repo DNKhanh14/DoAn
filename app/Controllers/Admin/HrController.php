@@ -9,6 +9,7 @@ class HrController extends AdminController
 {
     public function index(): void
     {
+        $this->requirePermission('hr');
         $pageTitle = 'Quản lý lương';
         $month = $_GET['month'] ?? date('Y-m');
         [$from, $to] = $this->monthRange($month);
@@ -34,11 +35,13 @@ class HrController extends AdminController
             'to'             => $to,
             'message'        => $message,
             'bonusCategories' => $bonusCategories,
+            'readOnly'       => $this->isReadOnly(),
         ], true);
     }
 
     public function detail(): void
     {
+        $this->requirePermission('hr');
         $pageTitle = 'Chi tiết lương';
         $month = $_GET['month'] ?? date('Y-m');
         [$from, $to] = $this->monthRange($month);
@@ -87,6 +90,7 @@ class HrController extends AdminController
             'summary'            => $summary,
             'payrollSettings'    => $payrollSettings,
             'bonusCategories'    => $bonusCategories,
+            'readOnly'           => $this->isReadOnly(),
         ], true);
     }
 
@@ -111,6 +115,13 @@ class HrController extends AdminController
         }
 
         $action = $_POST['action'] ?? $_GET['action'] ?? '';
+
+        // Read-only roles chỉ được xem, không được ghi
+        $writeActions = ['save_leave', 'save_bonus_penalty', 'save_payment', 'save_settings'];
+        if ($this->isReadOnly() && in_array($action, $writeActions, true)) {
+            http_response_code(403);
+            $this->jsonResponse(['error' => 'Bạn không có quyền thực hiện thao tác này.']);
+        }
 
         try {
             $hr = new Hr();

@@ -1,8 +1,6 @@
 <?php
 
-/**
- * Helper dùng chung toàn dự án: URL, làm sạch input, tiêu đề trang.
- */
+
 
 /** In tiêu đề tab trình duyệt — trang khách (website) */
 function getTitle(): void

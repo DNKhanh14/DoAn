@@ -119,4 +119,16 @@ class Service extends Model
         $stmt = $this->db->prepare('DELETE FROM dich_vu WHERE ma_dich_vu = ?');
         $stmt->execute([$id]);
     }
+
+    public function getByIds(array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $this->db->prepare("SELECT * FROM dich_vu WHERE ma_dich_vu IN ($placeholders)");
+        $stmt->execute(array_values($ids));
+
+        return $stmt->fetchAll();
+    }
 }

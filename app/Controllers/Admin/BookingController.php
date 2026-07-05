@@ -10,17 +10,30 @@ class BookingController extends AdminController
 {
     public function index(): void
     {
+        $this->requirePermission('booking');
         $pageTitle = 'Lịch hẹn';
-        $view = $_GET['view'] ?? 'week';
+        $view = $_GET['view'] ?? 'custom';
         $date = $_GET['date'] ?? date('Y-m-d');
 
-        $from = $date;
-        $to = $date;
-        if ($view === 'week') {
-            $to = date('Y-m-d', strtotime($date . ' +6 days'));
+        // Nếu người dùng chọn khoảng ngày thủ công (date + date_to)
+        $dateTo = $_GET['date_to'] ?? '';
+
+        if ($dateTo !== '' && $dateTo >= $date) {
+            // Chế độ custom: dùng đúng khoảng người dùng chọn
+            $from = $date;
+            $to   = $dateTo;
+            $view = 'custom';
+        } elseif ($view === 'week') {
+            $from = $date;
+            $to   = date('Y-m-d', strtotime($date . ' +6 days'));
         } elseif ($view === 'month') {
             $from = date('Y-m-01', strtotime($date));
-            $to = date('Y-m-t', strtotime($date));
+            $to   = date('Y-m-t', strtotime($date));
+        } else {
+            // day hoặc mặc định
+            $from = $date;
+            $to   = $date;
+            $view = 'day';
         }
 
         $appointmentModel = new Appointment();
@@ -42,6 +55,7 @@ class BookingController extends AdminController
 
     public function create(): void
     {
+        $this->requirePermission('booking');
         $pageTitle = 'Tạo lịch hẹn';
         $message = null;
 
@@ -82,14 +96,34 @@ class BookingController extends AdminController
                 $newIds = $appointmentModel->createFromGuestGroups($baseData, $guestGroups);
                 $newId = $newIds[0] ?? 0;
 
-                if (!empty($_POST['schedule_reminder']) && $newId > 0) {
-                    $remindAt = date('Y-m-d H:i:s', strtotime($_POST['start_time'] . ' -2 hours'));
-                    $appointmentModel->queueReminder(
-                        $newId,
-                        $_POST['reminder_channel'] ?? 'zalo',
-                        $remindAt,
-                        'Nhắc lịch hẹn tại tiệm - bạn có thể tùy chỉnh nội dung sau'
-                    );
+                // Gửi email xác nhận cho khách hàng (nếu có email)
+                if ($newId > 0) {
+                    try {
+                        $client = (new Client())->find($clientId);
+                        $clientEmail = $client['email'] ?? '';
+                        // Bỏ email giả (tạo tự động khi không có email thật)
+                        if (!empty($clientEmail) && !str_contains($clientEmail, '@salon.local')) {
+                            $clientName = trim(($client['ten'] ?? '') . ' ' . ($client['ho_dem'] ?? ''));
+                            // Lấy thông tin dịch vụ và nhân viên từ tất cả nhóm
+                            $allServiceIds = array_merge(...array_column($guestGroups, 'service_ids'));
+                            $svcModel = new \App\Models\Service();
+                            $svcDetails = $svcModel->getByIds(array_unique($allServiceIds));
+                            // Lấy tên NV đầu tiên đại diện
+                            $firstEmpId = $guestGroups[0]['ma_nhan_vien'] ?? 0;
+                            $empObj = $firstEmpId > 0 ? (new Employee())->find($firstEmpId) : null;
+                            $empName = $empObj ? trim(($empObj['ten'] ?? '') . ' ' . ($empObj['ho_dem'] ?? '')) : 'Barber';
+                            (new \MailService())->sendBookingConfirmation($clientEmail, $clientName, [
+                                'start_time'  => $_POST['start_time'],
+                                'barber_name' => $empName,
+                                'services'    => array_map(fn ($s) => [
+                                    'name'  => $s['ten_dich_vu'],
+                                    'price' => $s['gia'],
+                                ], $svcDetails),
+                            ]);
+                        }
+                    } catch (\Throwable $mailErr) {
+                        error_log('Admin booking email error: ' . $mailErr->getMessage());
+                    }
                 }
 
                 header('Location: index.php?route=booking&date=' . urlencode(date('Y-m-d', strtotime($_POST['start_time']))) . '&msg=created');
@@ -156,7 +190,7 @@ class BookingController extends AdminController
 
             $byEmployee = [];
             foreach ($rows as $row) {
-                // JS gửi service_id / employee_id, hỗ trợ cả ma_dich_vu / ma_nhan_vien
+                
                 $serviceId  = (int) ($row['service_id']  ?? $row['ma_dich_vu']   ?? 0);
                 $employeeId = (int) ($row['employee_id'] ?? $row['ma_nhan_vien'] ?? 0);
                 if ($serviceId <= 0 || $employeeId <= 0) {
@@ -178,6 +212,7 @@ class BookingController extends AdminController
 
     public function edit(): void
     {
+        $this->requirePermission('booking');
         $pageTitle = 'Sửa lịch hẹn';
         $id = (int) ($_GET['id'] ?? 0);
         $appointmentModel = new Appointment();
@@ -248,7 +283,6 @@ class BookingController extends AdminController
             $id     = (int) ($_POST['ma_lich_hen'] ?? $_POST['appointment_id'] ?? 0);
             $status = $_POST['status'] ?? 'confirmed';
 
-            // Normalize: map legacy statuses to new 3-state flow
             $map = [
                 'pending'    => 'confirmed',
                 'arrived'    => 'check_in',
@@ -261,7 +295,14 @@ class BookingController extends AdminController
                 (new Appointment())->updateStatus($id, $status);
             }
         }
-        header('Location: index.php?route=booking&date=' . urlencode($_POST['redirect_date'] ?? date('Y-m-d')));
+
+        $redirectDate   = $_POST['redirect_date']    ?? date('Y-m-d');
+        $redirectDateTo = $_POST['redirect_date_to'] ?? '';
+        $params = ['date' => $redirectDate];
+        if ($redirectDateTo !== '' && $redirectDateTo !== $redirectDate) {
+            $params['date_to'] = $redirectDateTo;
+        }
+        header('Location: index.php?route=booking&' . http_build_query($params));
         exit;
     }
 
@@ -274,7 +315,29 @@ class BookingController extends AdminController
         if (($_POST['do'] ?? '') === 'Cancel Appointment') {
             $id     = (int) ($_POST['appointment_id'] ?? 0);
             $reason = test_input($_POST['cancellation_reason'] ?? '');
-            (new Appointment())->cancel($id, $reason);
+            $appointmentModel = new Appointment();
+
+            // Lấy thông tin lịch hẹn trước khi hủy để gửi email
+            $appt = $appointmentModel->getById($id);
+            $appointmentModel->cancel($id, $reason);
+
+            // Gửi email thông báo hủy cho khách hàng
+            if ($appt && !empty($appt['ma_khach_hang'])) {
+                try {
+                    $client = (new Client())->find((int) $appt['ma_khach_hang']);
+                    $clientEmail = $client['email'] ?? '';
+                    if (!empty($clientEmail) && !str_contains($clientEmail, '@salon.local')) {
+                        $clientName = trim(($client['ten'] ?? '') . ' ' . ($client['ho_dem'] ?? ''));
+                        (new \MailService())->sendBookingCancellation($clientEmail, $clientName, [
+                            'start_time'    => $appt['thoi_gian_bat_dau'] ?? '',
+                            'cancel_reason' => $reason,
+                        ]);
+                    }
+                } catch (\Throwable $mailErr) {
+                    error_log('Cancel email error: ' . $mailErr->getMessage());
+                }
+            }
+
             $this->jsonResponse(['success' => true]);
         }
 

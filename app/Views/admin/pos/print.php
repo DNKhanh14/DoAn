@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
     <meta charset="utf-8">
-    <title>In hóa đơn <?= htmlspecialchars($order['ma_don'] ?? $order['ma_don_hang']) ?></title>
+    <title>In hóa đơn <?= htmlspecialchars($order['ma_don'] ?? ('HD' . str_pad((string) $order['ma_don_hang'], 6, '0', STR_PAD_LEFT))) ?></title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 320px; margin: 20px auto; font-size: 13px; }
         h2 { text-align: center; margin: 0 0 8px; }
@@ -14,7 +14,8 @@
 </head>
 <body onload="window.print()">
     <h2>BARBER SALON</h2>
-    <p style="text-align:center;margin:0">Hóa đơn: <?= htmlspecialchars($order['ma_don'] ?? ('#' . $order['ma_don_hang'])) ?></p>
+    <?php $printCode = $order['ma_don'] ?? ('HD' . str_pad((string) $order['ma_don_hang'], 6, '0', STR_PAD_LEFT)); ?>
+    <p style="text-align:center;margin:0">Hóa đơn: <?= htmlspecialchars($printCode) ?></p>
     <p style="text-align:center;margin:4px 0 12px"><?= htmlspecialchars($order['ngay_tao']) ?></p>
     <p>Khách: <?= htmlspecialchars(trim(($order['ten'] ?? '') . ' ' . ($order['ho_dem'] ?? '')) ?: 'Khách lẻ') ?></p>
     <table>

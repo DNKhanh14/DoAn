@@ -1,7 +1,6 @@
 (function () {
     const cfg = window.POS_CONFIG || {};
     const employees = cfg.employees || [];
-    const defaultEmployeeId = cfg.defaultEmployeeId || 0;
 
     let state = {
         clientId: 0,
@@ -14,17 +13,26 @@
         appointmentId: 0,
     };
 
-    function defaultEmployee() {
-        const e = employees.find(x => x.employee_id == defaultEmployeeId) || employees[0];
-        if (!e) return { id: 0, name: '—' };
-        return { id: parseInt(e.employee_id, 10), name: (e.first_name + ' ' + e.last_name).toUpperCase() };
-    }
+    /* ─── Tiện ích ─────────────────────────────────────── */
 
-    /** Format tiền VND: 100000 → "100.000" (phần số; UI thêm " VND" khi cần) */
     function formatVnd(n) {
         return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     }
     const formatMoney = formatVnd;
+
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+
+    function parseMoney(str) {
+        return parseFloat(String(str).replace(/\./g, '').replace(/,/g, '')) || 0;
+    }
+
+    function uid() {
+        return 'l' + Date.now() + Math.random().toString(36).slice(2, 7);
+    }
 
     function lineSubtotal(line) {
         const base = line.unitPrice * line.qty;
@@ -35,30 +43,24 @@
     function calcTotals() {
         let subtotal = 0;
         state.lines.forEach(l => { subtotal += lineSubtotal(l); });
-        let invDisc = state.invoiceDiscountPercent
+        const invDisc = state.invoiceDiscountPercent
             ? subtotal * state.invoiceDiscount / 100
             : state.invoiceDiscount;
-        const total = Math.max(0, subtotal - invDisc);
-        return { subtotal, invDisc, total };
+        return { subtotal, invDisc, total: Math.max(0, subtotal - invDisc) };
     }
 
-    function uid() {
-        return 'l' + Date.now() + Math.random().toString(36).slice(2, 7);
-    }
+    /* ─── Cart ─────────────────────────────────────────── */
 
     function addLine(type, refId, name, unitPrice) {
-        const emp = defaultEmployee();
         state.lines.push({
-            uid: uid(),
-            type: type,
-            refId: refId,
-            name: name,
+            uid: uid(), type, refId, name,
             qty: 1,
             unitPrice: parseFloat(unitPrice) || 0,
-            discount: 0,
-            discountPercent: false,
-            employeeId: emp.id,
-            employeeName: emp.name,
+            discount: 0, discountPercent: false,
+            employeeId: 0,
+            employeeName: '— Chưa chọn —',
+            employeeIds: [],    // danh sách nhiều NV
+            employeeNames: [],  // tên tương ứng
         });
         renderCart();
     }
@@ -75,10 +77,19 @@
             if (empty) empty.style.display = 'none';
             tbody.innerHTML = state.lines.map((line, idx) => {
                 const total = lineSubtotal(line);
+                // Hiển thị tất cả tên NV đã chọn
+                let empLabel;
+                if (line.employeeNames && line.employeeNames.length > 0) {
+                    empLabel = line.employeeNames.map(n => escapeHtml(n)).join(' &amp; ');
+                } else {
+                    empLabel = '<span style="color:#dc2626;font-size:11px"><i class="fas fa-exclamation-circle"></i> Chưa chọn NV</span>';
+                }
                 return `<tr data-idx="${idx}">
                     <td>
                         <div class="pos-line-name">${escapeHtml(line.name)}</div>
-                        <div class="pos-line-staff" data-assign="${idx}">NV: ${escapeHtml(line.employeeName)}</div>
+                        <div class="pos-line-staff" data-assign="${idx}" title="Click để phân công nhân viên" style="cursor:pointer">
+                            NV: ${empLabel}
+                        </div>
                     </td>
                     <td><input type="number" class="pos-qty-input" min="1" value="${line.qty}" data-qty="${idx}"></td>
                     <td>
@@ -99,42 +110,34 @@
             }).join('');
         }
 
-        const { subtotal, invDisc, total } = calcTotals();
-        const elSub = document.getElementById('posSubtotal');
+        const { subtotal, total } = calcTotals();
+        const elSub   = document.getElementById('posSubtotal');
         const elTotal = document.getElementById('posGrandTotal');
-        const elCode = document.getElementById('posOrderCodeDisplay');
-        if (elSub) elSub.textContent = formatMoney(subtotal);
+        const elCode  = document.getElementById('posOrderCodeDisplay');
+        if (elSub)   elSub.textContent   = formatMoney(subtotal);
         if (elTotal) elTotal.textContent = formatMoney(total);
-        if (elCode) elCode.textContent = '(' + (state.orderCode || '') + ')';
-
+        if (elCode)  elCode.textContent  = '(' + (state.orderCode || '') + ')';
         document.getElementById('posTabLabel').textContent = state.clientName;
     }
 
-    function escapeHtml(s) {
-        const d = document.createElement('div');
-        d.textContent = s;
-        return d.innerHTML;
-    }
-
-    function parseMoney(str) {
-        return parseFloat(String(str).replace(/\./g, '').replace(/,/g, '')) || 0;
-    }
+    /* ─── Prefill từ lịch hẹn ──────────────────────────── */
 
     function initFromPrefill(prefill) {
         if (!prefill) return;
         state.appointmentId = parseInt(prefill.appointment_id, 10) || 0;
-        state.clientId = parseInt(prefill.client_id, 10) || 0;
-        state.clientName = prefill.client_name || 'Khách vãng lai';
+        state.clientId      = parseInt(prefill.client_id, 10) || 0;
+        state.clientName    = prefill.client_name || 'Khách vãng lai';
         const searchEl = document.getElementById('posClientSearch');
         if (searchEl) searchEl.value = state.clientName;
         const tab = document.getElementById('posTabLabel');
         if (tab) tab.textContent = state.clientName;
-        if (!prefill.lines || !prefill.lines.length) {
-            renderCart();
-            return;
-        }
-        state.lines = prefill.lines.map(function (l) {
-            const emp = defaultEmployee();
+        if (!prefill.lines || !prefill.lines.length) { renderCart(); return; }
+        state.lines = prefill.lines.map(l => {
+            const empId  = parseInt(l.employee_id, 10) || 0;
+            const empObj = employees.find(e => parseInt(e.employee_id, 10) === empId);
+            const empName = empObj
+                    ? (empObj.first_name + ' ' + empObj.last_name).toUpperCase()
+                    : (l.employee_name || '');
             return {
                 uid: uid(),
                 type: l.type || 'service',
@@ -142,14 +145,17 @@
                 name: l.name,
                 qty: parseInt(l.qty, 10) || 1,
                 unitPrice: parseFloat(l.unit_price) || 0,
-                discount: 0,
-                discountPercent: false,
-                employeeId: parseInt(l.employee_id, 10) || emp.id,
-                employeeName: l.employee_name || emp.name,
+                discount: 0, discountPercent: false,
+                employeeId: empId,
+                employeeName: empName,
+                employeeIds:   empId > 0 ? [empId]     : [],
+                employeeNames: empName   ? [empName]   : [],
             };
         });
         renderCart();
     }
+
+    /* ─── Reset hóa đơn ────────────────────────────────── */
 
     function resetInvoice() {
         state.lines = [];
@@ -164,30 +170,28 @@
         renderCart();
     }
 
+    /* ─── Catalog ──────────────────────────────────────── */
+
     function bindCatalog() {
         document.querySelectorAll('.pos-cat-item').forEach(el => {
             el.addEventListener('click', function () {
                 addLine(this.dataset.type, parseInt(this.dataset.id, 10), this.dataset.name, this.dataset.price);
             });
         });
-
         document.querySelectorAll('.pos-cat-header').forEach(h => {
             h.addEventListener('click', function () {
                 this.closest('.pos-cat-group').classList.toggle('open');
             });
         });
-
         const search = document.getElementById('posCatalogSearch');
         if (search) {
             search.addEventListener('input', function () {
                 const q = this.value.toLowerCase();
                 document.querySelectorAll('.pos-cat-item').forEach(item => {
-                    const name = (item.dataset.name || '').toLowerCase();
-                    item.classList.toggle('hidden', q && name.indexOf(q) === -1);
+                    item.classList.toggle('hidden', q && !(item.dataset.name || '').toLowerCase().includes(q));
                 });
             });
         }
-
         document.querySelectorAll('[data-catalog-tab]').forEach(btn => {
             btn.addEventListener('click', function () {
                 document.querySelectorAll('[data-catalog-tab]').forEach(b => b.classList.remove('active'));
@@ -200,21 +204,19 @@
         });
     }
 
+    /* ─── Sự kiện trong cart ───────────────────────────── */
+
     function bindCartEvents() {
         const tbody = document.getElementById('posCartBody');
         if (!tbody) return;
-
         tbody.addEventListener('click', function (e) {
             const del = e.target.closest('[data-del]');
-            if (del) {
-                state.lines.splice(parseInt(del.dataset.del, 10), 1);
-                renderCart();
-                return;
-            }
+            if (del) { state.lines.splice(parseInt(del.dataset.del, 10), 1); renderCart(); return; }
+
             const assign = e.target.closest('[data-assign]');
             if (assign) {
                 state.selectedLineIndex = parseInt(assign.dataset.assign, 10);
-                $('#posStaffModal').modal('show');
+                openStaffModal();
                 return;
             }
             const discToggle = e.target.closest('[data-disc-toggle]');
@@ -224,41 +226,26 @@
                 renderCart();
             }
         });
-
         tbody.addEventListener('change', function (e) {
             const qty = e.target.closest('[data-qty]');
-            if (qty) {
-                const idx = parseInt(qty.dataset.qty, 10);
-                state.lines[idx].qty = Math.max(1, parseInt(qty.value, 10) || 1);
-                renderCart();
-            }
+            if (qty) { const i = parseInt(qty.dataset.qty, 10); state.lines[i].qty = Math.max(1, parseInt(qty.value, 10) || 1); renderCart(); }
             const price = e.target.closest('[data-price]');
-            if (price) {
-                const idx = parseInt(price.dataset.price, 10);
-                state.lines[idx].unitPrice = parseMoney(price.value);
-                renderCart();
-            }
+            if (price) { const i = parseInt(price.dataset.price, 10); state.lines[i].unitPrice = parseMoney(price.value); renderCart(); }
             const disc = e.target.closest('[data-disc]');
-            if (disc) {
-                const idx = parseInt(disc.dataset.disc, 10);
-                state.lines[idx].discount = parseFloat(disc.value) || 0;
-                renderCart();
-            }
+            if (disc) { const i = parseInt(disc.dataset.disc, 10); state.lines[i].discount = parseFloat(disc.value) || 0; renderCart(); }
         });
     }
 
+    /* ─── Tìm kiếm khách ──────────────────────────────── */
+
     function bindClientSearch() {
-        const input = document.getElementById('posClientSearch');
+        const input    = document.getElementById('posClientSearch');
         const dropdown = document.getElementById('posClientDropdown');
         let timer;
-
         input.addEventListener('input', function () {
             clearTimeout(timer);
             const q = this.value.trim();
-            if (q.length < 1) {
-                dropdown.classList.remove('show');
-                return;
-            }
+            if (q.length < 1) { dropdown.classList.remove('show'); return; }
             timer = setTimeout(() => {
                 fetch('index.php?route=ajax/pos&action=search_clients&q=' + encodeURIComponent(q))
                     .then(r => r.json())
@@ -272,49 +259,120 @@
                     });
             }, 300);
         });
-
         dropdown.addEventListener('click', function (e) {
             const btn = e.target.closest('button[data-id]');
             if (!btn) return;
-            state.clientId = parseInt(btn.dataset.id, 10);
+            state.clientId   = parseInt(btn.dataset.id, 10);
             state.clientName = btn.dataset.name;
             input.value = state.clientName;
             dropdown.classList.remove('show');
             renderCart();
         });
-
         document.addEventListener('click', function (e) {
-            if (!input.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.classList.remove('show');
-            }
+            if (!input.contains(e.target) && !dropdown.contains(e.target)) dropdown.classList.remove('show');
         });
     }
 
-    function bindStaffModal() {
-        const sel = document.getElementById('posStaffSelect');
-        if (!sel) return;
-        employees.forEach(e => {
-            const o = document.createElement('option');
-            o.value = e.employee_id;
-            o.textContent = e.first_name + ' ' + e.last_name;
-            sel.appendChild(o);
+    /* ─── Modal xếp nhân viên (checkbox đơn giản) ─────── */
+
+    function openStaffModal() {
+        const list = document.getElementById('posStaffCheckboxList');
+        if (!list) return;
+
+        // Gom tất cả NV đang được chọn trong hóa đơn (từ bất kỳ dòng nào)
+        const selected = new Set();
+        state.lines.forEach(l => {
+            (l.employeeIds || []).forEach(id => { if (id > 0) selected.add(id); });
+            if (l.employeeId > 0) selected.add(l.employeeId);
         });
+
+        if (employees.length === 0) {
+            list.innerHTML = '<p class="text-muted text-center py-3 small">Chưa có nhân viên nào.</p>';
+        } else {
+            list.innerHTML = employees.map(e => {
+                const id      = parseInt(e.employee_id, 10);
+                const name    = e.first_name + ' ' + e.last_name;
+                const checked = selected.has(id) ? 'checked' : '';
+                return `<label class="d-flex align-items-center px-3 py-2" style="gap:10px;cursor:pointer;border-bottom:1px solid #f0f0f0;margin:0">
+                    <input type="checkbox" class="pos-staff-cb" value="${id}" ${checked}
+                           style="width:16px;height:16px;cursor:pointer;flex-shrink:0">
+                    <span style="font-size:14px;font-weight:500">${escapeHtml(name)}</span>
+                </label>`;
+            }).join('');
+        }
+
+        $('#posStaffModal').modal('show');
+    }
+
+    function bindStaffModal() {
         document.getElementById('posStaffSave').addEventListener('click', function () {
-            const idx = state.selectedLineIndex;
-            if (idx === null || !state.lines[idx]) return;
-            const opt = sel.options[sel.selectedIndex];
-            state.lines[idx].employeeId = parseInt(sel.value, 10);
-            state.lines[idx].employeeName = opt.textContent.toUpperCase();
+            // Thu thập danh sách NV được tích
+            const checked = [];
+            document.querySelectorAll('#posStaffCheckboxList .pos-staff-cb:checked').forEach(cb => {
+                const id  = parseInt(cb.value, 10);
+                const emp = employees.find(e => parseInt(e.employee_id, 10) === id);
+                if (emp) checked.push({
+                    id,
+                    name: (emp.first_name + ' ' + emp.last_name).toUpperCase()
+                });
+            });
+
+            // Gán cho tất cả dòng trong hóa đơn
+            state.lines.forEach(l => {
+                if (checked.length === 0) {
+                    // Bỏ chọn tất cả
+                    l.employeeId    = 0;
+                    l.employeeName  = '— Chưa chọn —';
+                    l.employeeIds   = [];
+                    l.employeeNames = [];
+                } else {
+                    // Lưu toàn bộ danh sách NV, dùng NV đầu làm primary
+                    l.employeeId    = checked[0].id;
+                    l.employeeName  = checked[0].name;
+                    l.employeeIds   = checked.map(c => c.id);
+                    l.employeeNames = checked.map(c => c.name);
+                }
+            });
+
             $('#posStaffModal').modal('hide');
             renderCart();
         });
     }
+
+    /* ─── Thanh toán ───────────────────────────────────── */
 
     function checkout() {
         if (state.lines.length === 0) {
             swal('Cảnh báo', 'Chưa có dịch vụ hoặc sản phẩm trong hóa đơn', 'warning');
             return;
         }
+        // Nếu dòng nào chưa có NV và hệ thống có NV mặc định → tự điền NV đầu tiên
+        if (employees.length > 0) {
+            state.lines.forEach(l => {
+                if (!l.employeeIds || l.employeeIds.length === 0) {
+                    const def = employees[0];
+                    l.employeeId    = parseInt(def.employee_id, 10);
+                    l.employeeName  = (def.first_name + ' ' + def.last_name).toUpperCase();
+                    l.employeeIds   = [l.employeeId];
+                    l.employeeNames = [l.employeeName];
+                }
+            });
+            renderCart();
+        }
+        const missing = state.lines.filter(l => !l.employeeIds || l.employeeIds.length === 0);
+        if (missing.length > 0) {
+            swal({
+                title: 'Chưa chọn nhân viên',
+                text: 'Các dòng sau chưa có NV: ' + missing.map(l => l.name).join(', ') + '\nVẫn tiếp tục?',
+                icon: 'warning',
+                buttons: { cancel: 'Quay lại', confirm: { text: 'Tiếp tục', className: 'btn-warning' } },
+            }).then(ok => { if (ok) openPaymentModal(); });
+            return;
+        }
+        openPaymentModal();
+    }
+
+    function openPaymentModal() {
         const { total } = calcTotals();
         const payEl = document.getElementById('posPayTotal');
         if (payEl) payEl.textContent = formatVnd(total) + ' VND';
@@ -323,26 +381,23 @@
 
     function confirmPayment() {
         const method = document.querySelector('input[name="pos_payment_method"]:checked')?.value || 'cash';
-        const note = document.getElementById('posPayNote')?.value || '';
+        const note   = document.getElementById('posPayNote')?.value || '';
         const deduct = document.getElementById('posDeductMaterials')?.checked;
 
         const payload = {
             client_id: state.clientId,
             appointment_id: state.appointmentId || 0,
             payment_method: method,
-            note: note,
-            deduct_materials: deduct ? 1 : 0,
-            order_code: state.orderCode,
+            note, order_code: state.orderCode,
             invoice_discount: state.invoiceDiscount,
             invoice_discount_percent: state.invoiceDiscountPercent,
+            deduct_materials: deduct ? 1 : 0,
             lines: state.lines.map(l => ({
-                type: l.type,
-                ref_id: l.refId,
-                qty: l.qty,
-                unit_price: l.unitPrice,
-                discount: l.discount,
+                type: l.type, ref_id: l.refId, qty: l.qty,
+                unit_price: l.unitPrice, discount: l.discount,
                 discount_percent: l.discountPercent,
                 employee_id: l.employeeId,
+                employee_ids: l.employeeIds || (l.employeeId > 0 ? [l.employeeId] : []),
             })),
         };
 
@@ -366,14 +421,17 @@
             .catch(err => swal('Lỗi', err.message || 'Không thể thanh toán', 'error'));
     }
 
+    /* ─── Khởi động ────────────────────────────────────── */
+
     document.addEventListener('DOMContentLoaded', function () {
         if (!document.querySelector('.pos-easy')) return;
 
         const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
         const timeEl = document.getElementById('posDateTime');
         if (timeEl) {
-            const pad = n => String(n).padStart(2, '0');
-            timeEl.value = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+            timeEl.value = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
+                         + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
         }
 
         bindCatalog();
@@ -388,20 +446,22 @@
         });
         document.getElementById('posBtnPay')?.addEventListener('click', checkout);
         document.getElementById('posConfirmPay')?.addEventListener('click', confirmPayment);
+
+        /* Nút footer "Xếp nhân viên" → mở modal tổng hợp tất cả dòng */
         document.getElementById('posBtnAssignStaff')?.addEventListener('click', function () {
-            if (state.lines.length === 0) return;
-            state.selectedLineIndex = 0;
-            $('#posStaffModal').modal('show');
+            if (state.lines.length === 0) { swal('', 'Thêm dịch vụ vào hóa đơn trước', 'info'); return; }
+            state.selectedLineIndex = null;
+            openStaffModal();
         });
+
         document.getElementById('posBtnPrint')?.addEventListener('click', function () {
             swal('In hóa đơn', 'Thanh toán xong để in bill hoặc mở Danh sách đơn hàng', 'info');
         });
 
-        const invDisc = document.getElementById('posInvDiscount');
+        const invDisc       = document.getElementById('posInvDiscount');
         const invDiscToggle = document.getElementById('posInvDiscountToggle');
         invDisc?.addEventListener('input', function () {
-            state.invoiceDiscount = parseFloat(this.value) || 0;
-            renderCart();
+            state.invoiceDiscount = parseFloat(this.value) || 0; renderCart();
         });
         invDiscToggle?.addEventListener('click', function () {
             state.invoiceDiscountPercent = !state.invoiceDiscountPercent;
@@ -415,7 +475,7 @@
             if (!name) return;
             const parts = name.trim().split(/\s+/);
             const first = parts.shift() || 'Khách';
-            const last = parts.join(' ') || 'Mới';
+            const last  = parts.join(' ') || 'Mới';
             const phone = prompt('Số điện thoại:') || '';
             const fd = new FormData();
             fd.append('action', 'quick_client');
@@ -426,7 +486,7 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data.client) {
-                        state.clientId = data.client.client_id;
+                        state.clientId   = data.client.client_id;
                         state.clientName = data.client.first_name + ' ' + data.client.last_name;
                         document.getElementById('posClientSearch').value = state.clientName;
                         renderCart();
@@ -434,14 +494,9 @@
                 });
         });
 
-        document.querySelectorAll('.pos-cat-group').forEach((g, i) => {
-            if (i < 3) g.classList.add('open');
-        });
+        document.querySelectorAll('.pos-cat-group').forEach((g, i) => { if (i < 3) g.classList.add('open'); });
 
-        if (cfg.prefill) {
-            initFromPrefill(cfg.prefill);
-        } else {
-            renderCart();
-        }
+        if (cfg.prefill) initFromPrefill(cfg.prefill);
+        else renderCart();
     });
 })();

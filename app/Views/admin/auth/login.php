@@ -124,11 +124,6 @@
 
     </form>
 
-    <div class="auth-links">
-      Chưa có tài khoản?
-      <a href="index.php?route=register">Đăng ký ngay</a>
-    </div>
-
   </div>
 </div>
 

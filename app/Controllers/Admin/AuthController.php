@@ -3,6 +3,7 @@
 namespace App\Controllers\Admin;
 
 use App\Models\Admin;
+use App\Models\Permission;
 
 class AuthController extends AdminController
 {
@@ -20,9 +21,22 @@ class AuthController extends AdminController
             $admin = (new Admin())->authenticate($username, $hashedPass);
 
             if ($admin) {
-                $_SESSION['username_barbershop_Xw211qAAsq4'] = $username;
-                $_SESSION['password_barbershop_Xw211qAAsq4'] = $password;
-                $_SESSION['admin_id_barbershop_Xw211qAAsq4'] = $admin['ma_quan_tri'];
+                $role = !empty($admin['chuc_vu']) ? $admin['chuc_vu'] : 'super_admin';
+
+                // Lấy permissions — super_admin trả về full quyền ngay, không cần DB
+                $permModel   = new Permission();
+                $permissions = $permModel->getByRole($role);
+
+                // Xóa session cũ trước khi set mới
+                session_regenerate_id(true);
+
+                $_SESSION['username_barbershop_Xw211qAAsq4']  = $username;
+                $_SESSION['password_barbershop_Xw211qAAsq4']  = $password;
+                $_SESSION['admin_id_barbershop_Xw211qAAsq4']  = $admin['ma_nguoi_dung'];
+                $_SESSION['admin_role_barbershop']             = $role;
+                $_SESSION['admin_permissions_barbershop']      = $permissions;
+                $_SESSION['admin_name_barbershop']             = !empty($admin['ho_ten']) ? $admin['ho_ten'] : $username;
+                $_SESSION['admin_employee_id_barbershop']      = $admin['ma_nhan_vien'] ?? null;
 
                 $this->redirect('barber-admin/index.php?route=dashboard');
             }
@@ -39,43 +53,6 @@ class AuthController extends AdminController
         session_unset();
         session_destroy();
         $this->redirect('barber-admin/index.php?route=login');
-    }
-
-    // ── Đăng ký ───────────────────────────────────────────────────────────
-    public function register(): void
-    {
-        $this->requireGuest();
-        $error   = null;
-        $success = null;
-        $old     = [];
-
-        if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['register-button'])) {
-            $username  = test_input($_POST['username']  ?? '');
-            $email     = test_input($_POST['email']     ?? '');
-            $fullName  = test_input($_POST['full_name'] ?? '');
-            $password  = $_POST['password']  ?? '';
-            $password2 = $_POST['password2'] ?? '';
-            $old       = ['username' => $username, 'email' => $email, 'full_name' => $fullName];
-
-            // Validate
-            $error = $this->validateRegister($username, $email, $fullName, $password, $password2);
-
-            if (!$error) {
-                $model = new Admin();
-
-                if ($model->findByUsername($username)) {
-                    $error = 'Tên đăng nhập đã tồn tại.';
-                } elseif ($model->findByEmail($email)) {
-                    $error = 'Email này đã được sử dụng.';
-                } else {
-                    $model->create($username, $email, $fullName, sha1($password));
-                    $success = 'Tạo tài khoản thành công! Bạn có thể đăng nhập ngay.';
-                    $old = [];
-                }
-            }
-        }
-
-        require APP_PATH . '/Views/admin/auth/register.php';
     }
 
     // ── Quên mật khẩu ─────────────────────────────────────────────────────
@@ -111,7 +88,7 @@ class AuthController extends AdminController
                     if ($found) {
                         $newToken  = bin2hex(random_bytes(24));
                         $expiry    = date('Y-m-d H:i:s', strtotime('+1 hour'));
-                        $model->saveResetToken((int) $found['ma_quan_tri'], $newToken, $expiry);
+                        $model->saveResetToken((int) $found['ma_nguoi_dung'], $newToken, $expiry);
 
                         $resetLink = (isset($_SERVER['HTTPS']) ? 'https' : 'http')
                             . '://' . $_SERVER['HTTP_HOST']
@@ -156,7 +133,7 @@ class AuthController extends AdminController
                     $error = 'Mật khẩu nhập lại không khớp.';
                 } else {
                     $model->resetPassword($admin['email'], sha1($password));
-                    $model->clearResetToken((int) $admin['ma_quan_tri']);
+                    $model->clearResetToken((int) $admin['ma_nguoi_dung']);
                     $success = 'Đặt lại mật khẩu thành công! <a href="index.php?route=login">Đăng nhập ngay</a>';
                     $step    = 'done';
                 }
@@ -166,19 +143,4 @@ class AuthController extends AdminController
         require APP_PATH . '/Views/admin/auth/forgot-password.php';
     }
 
-    // ── Helper validate đăng ký ───────────────────────────────────────────
-    private function validateRegister(
-        string $username, string $email, string $fullName,
-        string $password, string $password2
-    ): ?string {
-        if ($username === '')   return 'Vui lòng nhập tên đăng nhập.';
-        if (strlen($username) < 4) return 'Tên đăng nhập phải từ 4 ký tự trở lên.';
-        if (!preg_match('/^[a-zA-Z0-9_]+$/', $username)) return 'Tên đăng nhập chỉ chứa chữ cái, số và dấu gạch dưới.';
-        if ($fullName === '')   return 'Vui lòng nhập họ tên.';
-        if ($email === '')      return 'Vui lòng nhập email.';
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return 'Email không hợp lệ.';
-        if (strlen($password) < 6) return 'Mật khẩu phải có ít nhất 6 ký tự.';
-        if ($password !== $password2) return 'Mật khẩu nhập lại không khớp.';
-        return null;
-    }
 }

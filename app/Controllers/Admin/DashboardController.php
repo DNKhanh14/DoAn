@@ -9,6 +9,7 @@ class DashboardController extends AdminController
 {
     public function index(): void
     {
+        $this->requirePermission('dashboard');
         $pageTitle = 'Bản tin';
         $db = Database::getConnection();
 

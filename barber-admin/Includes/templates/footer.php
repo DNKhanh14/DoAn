@@ -33,5 +33,8 @@
 <script src="Design/js/main.js"></script>
 <script src="Design/js/validation.js"></script>
 <script src="Design/js/money-input.js"></script>
+<?php if (!empty($extraJs)): ?>
+<script src="<?= htmlspecialchars($extraJs) ?>"></script>
+<?php endif; ?>
 </body>
 </html>

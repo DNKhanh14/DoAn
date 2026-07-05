@@ -15,6 +15,15 @@ class Client extends Model
         return $row ?: null;
     }
 
+    public function findByPhone(string $phone): ?array
+    {
+        $stmt = $this->db->prepare('SELECT * FROM khach_hang WHERE so_dien_thoai = ? LIMIT 1');
+        $stmt->execute([trim($phone)]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
     public function create(string $firstName, string $lastName, string $phone, string $email): int
     {
         $stmt = $this->db->prepare(
@@ -39,6 +48,47 @@ class Client extends Model
     public function getAll(): array
     {
         $stmt = $this->db->query('SELECT * FROM khach_hang ORDER BY ma_khach_hang DESC');
+        return $stmt->fetchAll();
+    }
+
+    public function count(string $q = ''): int
+    {
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $stmt = $this->db->prepare(
+                'SELECT COUNT(*) FROM khach_hang
+                 WHERE ten LIKE ? OR ho_dem LIKE ? OR so_dien_thoai LIKE ? OR email LIKE ?'
+            );
+            $stmt->execute([$like, $like, $like, $like]);
+        } else {
+            $stmt = $this->db->query('SELECT COUNT(*) FROM khach_hang');
+        }
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function getPaginated(int $offset, int $limit, string $q = ''): array
+    {
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $stmt = $this->db->prepare(
+                'SELECT * FROM khach_hang
+                 WHERE ten LIKE ? OR ho_dem LIKE ? OR so_dien_thoai LIKE ? OR email LIKE ?
+                 ORDER BY ma_khach_hang DESC LIMIT ? OFFSET ?'
+            );
+            $stmt->bindValue(1, $like);
+            $stmt->bindValue(2, $like);
+            $stmt->bindValue(3, $like);
+            $stmt->bindValue(4, $like);
+            $stmt->bindValue(5, $limit, \PDO::PARAM_INT);
+            $stmt->bindValue(6, $offset, \PDO::PARAM_INT);
+        } else {
+            $stmt = $this->db->prepare(
+                'SELECT * FROM khach_hang ORDER BY ma_khach_hang DESC LIMIT ? OFFSET ?'
+            );
+            $stmt->bindValue(1, $limit, \PDO::PARAM_INT);
+            $stmt->bindValue(2, $offset, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
         return $stmt->fetchAll();
     }
 

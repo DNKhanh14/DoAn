@@ -15,7 +15,8 @@ class PosController extends AdminController
 
     public function index(): void
     {
-        $pageTitle       = 'Thu ngân';
+        $this->requirePermission('pos');
+        $pageTitle = 'Thu ngân';
         $upgradeRequired = salon_upgrade_required();
         $employees       = (new Employee())->getAll();
 
@@ -35,14 +36,85 @@ class PosController extends AdminController
             'defaultEmployeeId' => !empty($employees) ? (int) $employees[0]['ma_nhan_vien'] : 0,
             'draftOrderCode'  => $upgradeRequired ? '' : (new Order())->generateOrderCode(),
             'prefill'         => $prefill,
+            'extraJs'         => 'Design/js/pos.js?v=' . (@filemtime(ADMIN_PATH . '/Design/js/pos.js') ?: time()),
         ], true);
     }
 
     public function orders(): void
     {
-        $this->adminView('pos/orders', [
+        $this->requirePermission('pos');
+        $page    = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage = max(5, min(100, (int) ($_GET['per_page'] ?? 20)));
+
+        $orderModel = new Order();
+        $totalItems = salon_upgrade_required() ? 0 : $orderModel->countAll();
+        $pag        = paginate($totalItems, $page, $perPage);
+        $pag['total'] = $totalItems;
+        $orders     = salon_upgrade_required() ? [] : $orderModel->getPaginated($pag['offset'], $perPage);
+        $baseUrl    = admin_route('pos/orders');
+
+        $this->adminView('pos/orders', compact('orders', 'pag', 'baseUrl') + [
             'pageTitle' => 'Danh sách đơn hàng',
-            'orders'    => salon_upgrade_required() ? [] : (new Order())->getRecent(100),
+        ], true);
+    }
+
+    public function deleteOrder(): void
+    {
+        $this->requirePermission('pos');
+        $id = (int) ($_POST['ma_don_hang'] ?? 0);
+        if ($id > 0) {
+            (new Order())->delete($id);
+            $_SESSION['flash_success'] = 'Đã xóa hóa đơn thành công.';
+        }
+        header('Location: ' . admin_route('pos/orders'));
+        exit;
+    }
+
+    public function editOrder(): void
+    {
+        $this->requirePermission('pos');
+        $id    = (int) ($_GET['id'] ?? $_POST['ma_don_hang'] ?? 0);
+        $order = (new Order())->find($id);
+        if (!$order) {
+            $_SESSION['flash_error'] = 'Không tìm thấy hóa đơn.';
+            header('Location: ' . admin_route('pos/orders'));
+            exit;
+        }
+
+        $message = null;
+        if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['save_order'])) {
+            $note   = test_input($_POST['ghi_chu'] ?? '');
+            $method = $_POST['phuong_thuc_thanh_toan'] ?? 'cash';
+            (new Order())->updateNote($id, $note, $method);
+            $_SESSION['flash_success'] = 'Đã cập nhật hóa đơn.';
+            header('Location: ' . admin_route('pos/orders'));
+            exit;
+        }
+
+        $items = (new Order())->getItems($id);
+        $this->adminView('pos/edit_order', [
+            'pageTitle' => 'Sửa hóa đơn ' . ('#' . $id),
+            'order'     => $order,
+            'items'     => $items,
+        ], true);
+    }
+
+    public function detail(): void
+    {
+        $this->requirePermission('pos');
+        $id    = (int) ($_GET['id'] ?? 0);
+        $order = (new Order())->find($id);
+        if (!$order) {
+            $_SESSION['flash_error'] = 'Không tìm thấy hóa đơn.';
+            header('Location: ' . admin_route('pos/orders'));
+            exit;
+        }
+        $items = (new Order())->getItems($id);
+        $orderCode = $order['ma_don'] ?? ('HD' . str_pad((string) $id, 6, '0', STR_PAD_LEFT));
+        $this->adminView('pos/detail', [
+            'pageTitle' => 'Chi tiết hóa đơn ' . $orderCode,
+            'order'     => $order,
+            'items'     => $items,
         ], true);
     }
 
@@ -101,7 +173,7 @@ class PosController extends AdminController
                     $this->jsonResponse([
                         'success'    => true,
                         'order_id'   => $orderId,
-                        'order_code' => $order['ma_don'] ?? ('#' . $orderId),
+                        'order_code' => $order['ma_don'] ?? ('HD' . str_pad((string) $orderId, 6, '0', STR_PAD_LEFT)),
                         'total'      => (float) $order['tong_cong'],
                     ]);
                     return;
@@ -160,19 +232,57 @@ class PosController extends AdminController
             $lineSub   = $unitPrice * $qty;
             $lineDisc  = $discPct ? ($lineSub * $discount / 100) : $discount;
             $lineTotal = max(0, $lineSub - $lineDisc);
-            $subtotal += $lineTotal;
+            $subtotal += $lineTotal;   // cộng 1 lần duy nhất cho tổng hóa đơn
 
-            $items[] = [
-                'item_type'          => $type,
-                'ref_id'             => $refId,
-                'item_name'          => $name,
-                'quantity'           => $qty,
-                'unit_price'         => $unitPrice,
-                'line_total'         => $lineTotal,
-                'ma_nhan_vien'       => (int) ($line['employee_id'] ?? 0) ?: null,
-                'line_discount'      => $lineDisc,
-                'discount_is_percent'=> $discPct,
-            ];
+            // Lấy danh sách NV — ưu tiên employee_ids (nhiều NV), fallback employee_id
+            $empIds = [];
+            if (!empty($line['employee_ids']) && is_array($line['employee_ids'])) {
+                $empIds = array_values(array_filter(array_map('intval', $line['employee_ids'])));
+            }
+            if (empty($empIds) && !empty($line['employee_id'])) {
+                $empIds = [(int) $line['employee_id']];
+            }
+
+            if (count($empIds) <= 1) {
+                // 1 NV hoặc không có → 1 dòng bình thường
+                $items[] = [
+                    'item_type'           => $type,
+                    'ref_id'              => $refId,
+                    'item_name'           => $name,
+                    'quantity'            => $qty,
+                    'unit_price'          => $unitPrice,
+                    'line_total'          => $lineTotal,
+                    'ma_nhan_vien'        => $empIds[0] ?? null,
+                    'line_discount'       => $lineDisc,
+                    'discount_is_percent' => $discPct,
+                ];
+            } else {
+                // Nhiều NV → tách thành N dòng, chia đều giá trị
+                $n            = count($empIds);
+                $splitPrice   = round($unitPrice / $n, 2);
+                $splitDisc    = round($lineDisc  / $n, 2);
+                $splitTotal   = round($lineTotal  / $n, 2);
+
+                foreach ($empIds as $i => $empId) {
+                    // Dòng cuối nhận phần còn lại (tránh sai số làm tròn)
+                    $isLast    = ($i === $n - 1);
+                    $thisPrice = $isLast ? ($unitPrice - $splitPrice * ($n - 1)) : $splitPrice;
+                    $thisDisc  = $isLast ? ($lineDisc  - $splitDisc  * ($n - 1)) : $splitDisc;
+                    $thisTotal = $isLast ? ($lineTotal  - $splitTotal * ($n - 1)) : $splitTotal;
+
+                    $items[] = [
+                        'item_type'           => $type,
+                        'ref_id'              => $refId,
+                        'item_name'           => $name,
+                        'quantity'            => $qty,
+                        'unit_price'          => $thisPrice,
+                        'line_total'          => max(0, $thisTotal),
+                        'ma_nhan_vien'        => $empId,
+                        'line_discount'       => $thisDisc,
+                        'discount_is_percent' => false,
+                    ];
+                }
+            }
         }
 
         $invDisc    = (float) ($data['invoice_discount'] ?? 0);
@@ -191,8 +301,7 @@ class PosController extends AdminController
             'tong_cong'              => $total,
             'phuong_thuc_thanh_toan' => $data['payment_method'] ?? 'cash',
             'ghi_chu'                => test_input($data['note'] ?? ''),
-            'diem_tich_luy'          => (int) floor($total / 10000),
-            'ma_don'                 => $data['order_code'] ?? null,
+            
         ], $items);
 
         if ($appointmentId > 0) {

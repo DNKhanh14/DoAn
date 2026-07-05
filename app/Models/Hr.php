@@ -159,10 +159,11 @@ class Hr extends Model
             return [];
         }
 
+        // Dùng ma_dich_vu IS NOT NULL để xác định loại dịch vụ (không có cột 'loai' trong DB)
         $stmt = $this->db->prepare(
             "SELECT e.ma_nhan_vien, e.ten, e.ho_dem,
-                    COALESCE(SUM(CASE WHEN oi.loai = 'service' THEN oi.tong_dong ELSE 0 END), 0) AS service_revenue,
-                    COALESCE(SUM(CASE WHEN oi.loai = 'product' THEN oi.tong_dong ELSE 0 END), 0) AS product_revenue
+                    COALESCE(SUM(CASE WHEN oi.ma_dich_vu IS NOT NULL THEN oi.tong_dong ELSE 0 END), 0) AS service_revenue,
+                    COALESCE(SUM(CASE WHEN oi.ma_san_pham IS NOT NULL AND oi.ma_dich_vu IS NULL THEN oi.tong_dong ELSE 0 END), 0) AS product_revenue
              FROM nhan_vien e
              LEFT JOIN chi_tiet_don_hang oi ON oi.ma_nhan_vien = e.ma_nhan_vien
              LEFT JOIN don_hang o ON o.ma_don_hang = oi.ma_don_hang
@@ -174,12 +175,10 @@ class Hr extends Model
         $stmt->execute([$from, $to]);
         $rows = $stmt->fetchAll();
 
-        $commissionRate = new CommissionRate();
         foreach ($rows as &$row) {
             $commission = 0.0;
             $employeeId = (int) $row['ma_nhan_vien'];
 
-            // Tính hoa hồng cho từng dòng hóa đơn của nhân viên
             $itemStmt = $this->db->prepare(
                 "SELECT oi.*
                  FROM chi_tiet_don_hang oi
@@ -219,13 +218,16 @@ class Hr extends Model
             return 0.0;
         }
 
-        $lineTotal = (float) ($item['tong_dong'] ?? 0);
-        $employeeId = (int) ($item['ma_nhan_vien'] ?? 0);
+        $lineTotal  = (float) ($item['tong_dong'] ?? 0);
+        $employeeId = (int)   ($item['ma_nhan_vien'] ?? 0);
 
-        // Chuẩn bị dữ liệu cho resolvePercent
+        // Xác định loại từ cột ma_dich_vu / ma_san_pham (không có cột 'loai' trong DB)
+        $isService = !empty($item['ma_dich_vu']);
+        $refId     = (int) ($isService ? $item['ma_dich_vu'] : ($item['ma_san_pham'] ?? 0));
+
         $itemForResolve = [
-            'item_type' => $item['loai'] ?? '',
-            'ref_id' => (int) ($item['ma_tham_chieu'] ?? 0),
+            'item_type' => $isService ? 'service' : 'product',
+            'ref_id'    => $refId,
         ];
 
         $percent = (new CommissionRate())->resolvePercent($itemForResolve, $employeeId);
@@ -457,11 +459,8 @@ class Hr extends Model
 
     public function getPayrollSettings(int $employeeId): array
     {
-        if (!table_exists('cai_dat_luong')) {
-            return ['base_salary' => 0.0];
-        }
-
-        $stmt = $this->db->prepare('SELECT luong_co_ban FROM cai_dat_luong WHERE ma_nhan_vien = ?');
+        // Lấy lương cơ bản trực tiếp từ bảng nhan_vien
+        $stmt = $this->db->prepare('SELECT luong_co_ban FROM nhan_vien WHERE ma_nhan_vien = ?');
         $stmt->execute([$employeeId]);
         $row = $stmt->fetch();
 
@@ -470,11 +469,9 @@ class Hr extends Model
 
     public function savePayrollSettings(int $employeeId, float $baseSalary): void
     {
-        $stmt = $this->db->prepare(
-            'INSERT INTO cai_dat_luong (ma_nhan_vien, luong_co_ban) VALUES (?,?)
-             ON DUPLICATE KEY UPDATE luong_co_ban = VALUES(luong_co_ban)'
-        );
-        $stmt->execute([$employeeId, $baseSalary]);
+        // Lưu lương cơ bản trực tiếp vào bảng nhan_vien
+        $stmt = $this->db->prepare('UPDATE nhan_vien SET luong_co_ban = ? WHERE ma_nhan_vien = ?');
+        $stmt->execute([$baseSalary, $employeeId]);
     }
 
     public function getEmployeeSummary(int $employeeId, string $from, string $to): array
@@ -494,12 +491,8 @@ class Hr extends Model
         $baseSalary = (float) $settings['base_salary'];
         $dailySalary = $daysInPeriod > 0 ? round($baseSalary / $daysInPeriod, 0) : 0.0;
 
-        // Nếu có chấm công: tính theo ngày; nếu không: dùng toàn bộ lương cứng
-        if ($workingDays > 0) {
-            $earnedBase = round($dailySalary * $workingDays, 0);
-        } else {
-            $earnedBase = $baseSalary;
-        }
+        // Tổng lương = Lương cố định + Hoa hồng (đơn giản, không phụ thuộc chấm công)
+        $earnedBase = $baseSalary;
 
         // Trừ lương theo ngày nghỉ:
         // - Nghỉ có phép (authorized):   trừ 20.000 VNĐ / ngày
@@ -508,10 +501,12 @@ class Hr extends Model
         $unauthorizedDays = (float) ($leave['unauthorized_days'] ?? 0);
         $leaveDeduction   = round($authorizedDays * 20000 + $unauthorizedDays * 50000, 0);
 
-        $gross = $earnedBase + $commission + $bonusPenalty['bonus'] - $bonusPenalty['penalty'] - $leaveDeduction;
-        $paid = $payments['advance'] + $payments['salary'] + $payments['salary_balance'] + $payments['revenue_bonus'];
+        // Tổng lương = Lương cố định + Hoa hồng + Thưởng - Phạt - Khấu trừ nghỉ
+        $gross     = $baseSalary + $commission + $bonusPenalty['bonus'] - $bonusPenalty['penalty'] - $leaveDeduction;
+        $paid      = $payments['advance'] + $payments['salary'] + $payments['salary_balance'] + $payments['revenue_bonus'];
         $remaining = max(0, $gross - $paid);
-        $netSalary = $gross - $payments['advance'];
+        // Lương thực lĩnh = gross - tất cả đã trả (không chỉ trừ advance)
+        $netSalary = max(0, $gross - $paid);
 
         return [
             'total_leave_days'    => (float) ($leave['total_days'] ?? 0),
@@ -541,7 +536,10 @@ class Hr extends Model
         }
 
         $stmt = $this->db->prepare(
-            "SELECT o.ma_don_hang, o.ma_don, o.ngay_tao, oi.ten, oi.tong_dong, oi.loai, oi.ma_nhan_vien, oi.ma_tham_chieu
+            "SELECT o.ma_don_hang,
+                    CONCAT('HD', LPAD(o.ma_don_hang, 6, '0')) AS ma_don,
+                    o.ngay_tao,
+                    oi.ten, oi.tong_dong, oi.ma_dich_vu, oi.ma_san_pham, oi.ma_nhan_vien
              FROM chi_tiet_don_hang oi
              INNER JOIN don_hang o ON o.ma_don_hang = oi.ma_don_hang
              WHERE oi.ma_nhan_vien = ?

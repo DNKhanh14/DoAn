@@ -4,9 +4,94 @@ namespace App\Models;
 
 use App\Core\Model;
 use Exception;
+use DateTime;
 
 class Appointment extends Model
 {
+    /** Giờ mở cửa: T2–T6 09:00–20:00 | T7–CN 09:00–21:00 */
+    private const SHOP_HOURS = [
+        1 => ['open' => '09:00', 'close' => '20:00'],
+        2 => ['open' => '09:00', 'close' => '20:00'],
+        3 => ['open' => '09:00', 'close' => '20:00'],
+        4 => ['open' => '09:00', 'close' => '20:00'],
+        5 => ['open' => '09:00', 'close' => '20:00'],
+        6 => ['open' => '09:00', 'close' => '21:00'],
+        7 => ['open' => '09:00', 'close' => '21:00'],
+    ];
+
+    private const CALENDAR_DAYS = 10;
+    private const SLOT_STEP_MINUTES = 15;
+
+    /**
+     * Kiểm tra thợ đã có lịch trùng khung giờ chưa
+     */
+    public function hasScheduleConflict(
+        int $employeeId,
+        string $startTime,
+        string $endTime,
+        ?int $excludeAppointmentId = null,
+        bool $lock = false
+    ): bool {
+        $sql = 'SELECT COUNT(*) FROM lich_hen
+                WHERE ma_nhan_vien = ?
+                  AND da_huy = 0
+                  AND thoi_gian_bat_dau < ?
+                  AND thoi_gian_ket_thuc_du_kien > ?';
+        $params = [$employeeId, $endTime, $startTime];
+
+        if ($excludeAppointmentId !== null && $excludeAppointmentId > 0) {
+            $sql .= ' AND ma_lich_hen <> ?';
+            $params[] = $excludeAppointmentId;
+        }
+
+        // Nếu đang true thì sẽ khóa không cho truy vấn bảng lịch hẹn tránh 2 ng chọn cùng 1 ng 1 time 
+        if ($lock) {
+            $sql .= ' FOR UPDATE';
+        }
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    private function getBookedRangesForEmployee(int $employeeId, string $fromDate, string $toDate): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT thoi_gian_bat_dau, thoi_gian_ket_thuc_du_kien
+             FROM lich_hen
+             WHERE ma_nhan_vien = ?
+               AND da_huy = 0
+               AND DATE(thoi_gian_bat_dau) BETWEEN ? AND ?
+             ORDER BY thoi_gian_bat_dau'
+        );
+        $stmt->execute([$employeeId, $fromDate, $toDate]);
+
+        $ranges = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $ranges[] = [
+                'start' => $row['thoi_gian_bat_dau'],
+                'end'   => $row['thoi_gian_ket_thuc_du_kien'],
+            ];
+        }
+
+        return $ranges;
+    }
+//kiểm tra time bận của thợ 
+    private function rangesOverlap(string $startA, string $endA, string $startB, string $endB): bool
+    {
+        return strtotime($startA) < strtotime($endB) && strtotime($endA) > strtotime($startB);
+    }
+
+    private function weekdayId(string $date): int
+    {
+        $dayId = (int) date('w', strtotime($date));
+        return $dayId === 0 ? 7 : $dayId;
+    }
+
+    /**
+     * Đặt lịch trực tuyến từ Website
+     */
     public function book(
         array $serviceIds,
         int $employeeId,
@@ -20,6 +105,11 @@ class Appointment extends Model
         $this->db->beginTransaction();
 
         try {
+            // Bật cờ true để LOCK dòng chống tình trạng trùng lịch khi 2 người bấm cùng giây
+            if ($this->hasScheduleConflict($employeeId, $startTime, $endTime, null, true)) {
+                throw new Exception('Khung giờ này đã được đặt trước. Vui lòng chọn giờ khác.');
+            }
+
             $clientModel = new Client();
             $clientId = $clientModel->findOrCreate($firstName, $lastName, $phone, $email);
 
@@ -27,9 +117,10 @@ class Appointment extends Model
                 'INSERT INTO lich_hen (ngay_tao, ma_khach_hang, ma_nhan_vien, thoi_gian_bat_dau, thoi_gian_ket_thuc_du_kien, trang_thai, nguon_dat)
                  VALUES (?, ?, ?, ?, ?, ?, ?)'
             );
-            $stmt->execute([date('Y-m-d H:i'), $clientId, $employeeId, $startTime, $endTime, 'pending', 'website']);
+            $stmt->execute([date('Y-m-d H:i'), $clientId, $employeeId, $startTime, $endTime, 'confirmed', 'website']);
             $appointmentId = (int) $this->db->lastInsertId();
 
+            // Chuẩn bị câu lệnh một lần trước vòng lặp
             $bookStmt = $this->db->prepare(
                 'INSERT INTO dich_vu_dat (ma_lich_hen, ma_dich_vu) VALUES (?, ?)'
             );
@@ -45,76 +136,57 @@ class Appointment extends Model
         }
     }
 
+    /**
+     * Lấy khung giờ trống trong 10 ngày tới của 1 thợ
+     */
     public function getCalendarSlots(int $employeeId, array $serviceIds): array
     {
-        $serviceModel = new Service();
-        $durationMinutes = $serviceModel->getDurationByIds($serviceIds);
+        $durationMinutes = (new Service())->getDurationByIds($serviceIds);
+        if ($durationMinutes < 15) {
+            $durationMinutes = 15;
+        }
+        $durationSecs = $durationMinutes * 60;
 
-        $secs = $durationMinutes * 60;
+        $startDate = date('Y-m-d');
+        $endDate = date('Y-m-d', strtotime('+' . (self::CALENDAR_DAYS - 1) . ' days', strtotime($startDate)));
+        $bookedRanges = $this->getBookedRangesForEmployee($employeeId, $startDate, $endDate); //thu thập khoảng thời gian bận của barber
 
-        // Giờ cố định: T2–T6 09:00–20:00 | T7–CN 09:00–21:00
-        $fixedHours = [
-            1 => ['open' => '09:00', 'close' => '20:00'], // Thứ 2
-            2 => ['open' => '09:00', 'close' => '20:00'], // Thứ 3
-            3 => ['open' => '09:00', 'close' => '20:00'], // Thứ 4
-            4 => ['open' => '09:00', 'close' => '20:00'], // Thứ 5
-            5 => ['open' => '09:00', 'close' => '20:00'], // Thứ 6
-            6 => ['open' => '09:00', 'close' => '21:00'], // Thứ 7
-            7 => ['open' => '09:00', 'close' => '21:00'], // Chủ nhật
-        ];
-
+        $now = time();
         $days = [];
-        $appointmentDate = date('Y-m-d');
 
-        for ($i = 0; $i < 10; $i++) {
-            $appointmentDate = date('Y-m-d', strtotime($appointmentDate . ' +1 day'));
-
-            // dayId: 1=T2 ... 6=T7, 7=CN
-            $dayId = (int) date('w', strtotime($appointmentDate));
-            if ($dayId === 0) {
-                $dayId = 7;
-            }
-
-            $hours    = $fixedHours[$dayId];
-            $openTime  = $hours['open'];
+        for ($i = 0; $i < self::CALENDAR_DAYS; $i++) {
+            $appointmentDate = date('Y-m-d', strtotime("+{$i} days", strtotime($startDate)));
+            $hours = self::SHOP_HOURS[$this->weekdayId($appointmentDate)];
+            $openTime = $hours['open'];
             $closeTime = $hours['close'];
 
             $slots = [];
-            $start  = $openTime;
-            $result = date('H:i', strtotime($start) + $secs);
+            $start = $openTime;
+            $endLabel = date('H:i', strtotime($start) + $durationSecs);
 
-            while ($start >= $openTime && $result <= $closeTime) {
-                // Kiểm tra slot chưa bị đặt
-                $stmt = $this->db->prepare(
-                    'SELECT *
-                     FROM lich_hen a
-                     WHERE DATE(thoi_gian_bat_dau) = ?
-                       AND a.ma_nhan_vien = ?
-                       AND da_huy = 0
-                       AND (
-                            TIME(thoi_gian_bat_dau) BETWEEN ? AND ?
-                            OR TIME(thoi_gian_ket_thuc_du_kien) BETWEEN ? AND ?
-                       )'
-                );
-                $stmt->execute([
-                    $appointmentDate,
-                    $employeeId,
-                    $start,
-                    $result,
-                    $start,
-                    $result,
-                ]);
+            while ($start >= $openTime && $endLabel <= $closeTime) {
+                $slotStart = $appointmentDate . ' ' . $start;
+                $slotEnd = $appointmentDate . ' ' . $endLabel;
 
-                if ($stmt->rowCount() === 0) {
-                    $slots[] = [
-                        'value' => $appointmentDate . ' ' . $start . ' ' . $result,
-                        'label' => $start,
-                        'id'    => $appointmentDate . ' ' . $start,
-                    ];
+                if (strtotime($slotStart) >= $now) {
+                    $available = true;
+                    foreach ($bookedRanges as $range) {
+                        if ($this->rangesOverlap($slotStart, $slotEnd, $range['start'], $range['end'])) {
+                            $available = false;
+                            break;
+                        }
+                    }
+                    if ($available) {
+                        $slots[] = [
+                            'value' => $appointmentDate . ' ' . $start . ' ' . $endLabel,
+                            'label' => $start,
+                            'id'    => $appointmentDate . ' ' . $start,
+                        ];
+                    }
                 }
 
-                $start  = date('H:i', strtotime('+15 minutes', strtotime($start)));
-                $result = date('H:i', strtotime($start) + $secs);
+                $start = date('H:i', strtotime('+' . self::SLOT_STEP_MINUTES . ' minutes', strtotime($start)));
+                $endLabel = date('H:i', strtotime($start) + $durationSecs);
             }
 
             $days[] = [
@@ -128,65 +200,74 @@ class Appointment extends Model
         return $days;
     }
 
+    /**
+     * INNER JOIN cho đồng bộ sạch sẽ
+     */
     public function getUpcoming(): array
     {
         $stmt = $this->db->prepare(
-            'SELECT *
-             FROM lich_hen a, khach_hang c
-             WHERE thoi_gian_bat_dau >= ?
-               AND a.ma_khach_hang = c.ma_khach_hang
-               AND da_huy = 0
-             ORDER BY thoi_gian_bat_dau'
+            'SELECT a.*, c.ten, c.ho_dem, c.so_dien_thoai, c.email
+             FROM lich_hen a
+             INNER JOIN khach_hang c ON a.ma_khach_hang = c.ma_khach_hang
+             WHERE a.thoi_gian_bat_dau >= ?
+               AND a.da_huy = 0
+             ORDER BY a.thoi_gian_bat_dau'
         );
         $stmt->execute([date('Y-m-d H:i:s')]);
 
         return $stmt->fetchAll();
     }
 
+  
     public function getAllWithClients(): array
     {
         $stmt = $this->db->query(
-            'SELECT *
-             FROM lich_hen a, khach_hang c
-             WHERE a.ma_khach_hang = c.ma_khach_hang
-             ORDER BY thoi_gian_bat_dau'
+            'SELECT a.*, c.ten, c.ho_dem, c.so_dien_thoai, c.email
+             FROM lich_hen a
+             INNER JOIN khach_hang c ON a.ma_khach_hang = c.ma_khach_hang
+             ORDER BY a.thoi_gian_bat_dau'
         );
 
         return $stmt->fetchAll();
     }
 
+   
     public function getCanceled(): array
     {
         $stmt = $this->db->query(
-            'SELECT *
-             FROM lich_hen a, khach_hang c
-             WHERE da_huy = 1
-               AND a.ma_khach_hang = c.ma_khach_hang'
+            'SELECT a.*, c.ten, c.ho_dem, c.so_dien_thoai, c.email
+             FROM lich_hen a
+             INNER JOIN khach_hang c ON a.ma_khach_hang = c.ma_khach_hang
+             WHERE a.da_huy = 1'
         );
 
         return $stmt->fetchAll();
     }
 
+    
     public function getBookedServices(int $appointmentId): array
     {
         $stmt = $this->db->prepare(
-            'SELECT ten_dich_vu
-             FROM dich_vu s, dich_vu_dat sb
-             WHERE s.ma_dich_vu = sb.ma_dich_vu
-               AND ma_lich_hen = ?'
+            'SELECT s.ten_dich_vu
+             FROM dich_vu s
+             INNER JOIN dich_vu_dat sb ON s.ma_dich_vu = sb.ma_dich_vu
+             WHERE sb.ma_lich_hen = ?'
         );
         $stmt->execute([$appointmentId]);
 
         return $stmt->fetchAll();
     }
 
+    /**
+     * SỬA LỖI: Đổi sang INNER JOIN
+     */
     public function getEmployeeForAppointment(int $appointmentId): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT ten, ho_dem
-             FROM nhan_vien e, lich_hen a
-             WHERE e.ma_nhan_vien = a.ma_nhan_vien
-               AND a.ma_lich_hen = ?'
+            'SELECT e.ten, e.ho_dem
+             FROM nhan_vien e
+             INNER JOIN lich_hen a ON e.ma_nhan_vien = a.ma_nhan_vien
+             WHERE a.ma_lich_hen = ?'
         );
         $stmt->execute([$appointmentId]);
         $row = $stmt->fetch();
@@ -196,6 +277,7 @@ class Appointment extends Model
 
     public function cancel(int $appointmentId, string $reason): void
     {
+       
         if (!salon_upgrade_required()) {
             $stmt = $this->db->prepare(
                 'UPDATE lich_hen SET da_huy = 1, trang_thai = ?, ly_do_huy = ? WHERE ma_lich_hen = ?'
@@ -212,7 +294,6 @@ class Appointment extends Model
     public function updateStatus(int $id, string $status, ?string $adminNote = null): void
     {
         $canceled = ($status === 'cancelled') ? 1 : 0;
-        // check_out = hoàn thành dịch vụ (completed legacy)
         $stmt = $this->db->prepare(
             'UPDATE lich_hen SET trang_thai = ?, da_huy = ? WHERE ma_lich_hen = ?'
         );
@@ -226,7 +307,7 @@ class Appointment extends Model
                     e.ten AS emp_fname, e.ho_dem AS emp_lname
              FROM lich_hen a
              INNER JOIN khach_hang c ON a.ma_khach_hang = c.ma_khach_hang
-             INNER JOIN nhan_vien e ON a.ma_nhan_vien = e.ma_nhan_vien
+             LEFT JOIN nhan_vien e ON a.ma_nhan_vien = e.ma_nhan_vien
              WHERE DATE(a.thoi_gian_bat_dau) BETWEEN ? AND ?
                AND a.da_huy = 0
                AND LOWER(a.trang_thai) NOT IN ('cancelled')
@@ -251,67 +332,55 @@ class Appointment extends Model
         return (bool) $stmt->fetchColumn();
     }
 
-    /**
-     * @param array<int, array{employee_id: int, service_ids: int[]}> $guestGroups
-     * @return int[]
-     */
     public function createFromGuestGroups(array $data, array $guestGroups): array
     {
         $serviceModel = new Service();
         $ids = [];
 
-        foreach ($guestGroups as $group) {
-            $serviceIds = array_values(array_unique(array_filter($group['service_ids'] ?? [])));
-            $employeeId = (int) ($group['ma_nhan_vien'] ?? 0);
-            if ($serviceIds === [] || $employeeId <= 0) {
-                continue;
+        // Khởi động giao dịch lớn cho cả group ngay từ ngoài vòng lặp
+        $this->db->beginTransaction();
+
+        try {
+            foreach ($guestGroups as $group) {
+                $serviceIds = array_values(array_unique(array_filter($group['service_ids'] ?? [])));
+                $employeeId = (int) ($group['ma_nhan_vien'] ?? 0);
+                if ($serviceIds === [] || $employeeId <= 0) {
+                    continue;
+                }
+
+                $durationMin = $serviceModel->getDurationByIds($serviceIds);
+                if ($durationMin < 15) {
+                    $durationMin = 30;
+                }
+                $start = new DateTime($data['start_time'] ?? $data['thoi_gian_bat_dau']);
+                $end = clone $start;
+                $end->modify('+' . $durationMin . ' minutes');
+
+                // Gọi trực tiếp logic tạo (được chia nhỏ bên dưới) không lặp lướt Transaction con nữa
+                $ids[] = $this->insertManualWithLock([
+                    'ma_khach_hang'             => $data['ma_khach_hang'] ?? $data['client_id'] ?? null,
+                    'ma_nhan_vien'              => $employeeId,
+                    'thoi_gian_bat_dau'         => $data['thoi_gian_bat_dau'] ?? $data['start_time'],
+                    'thoi_gian_ket_thuc_du_kien' => $end->format('Y-m-d H:i:s'),
+                    'trang_thai'                => $data['trang_thai'] ?? $data['status'] ?? 'confirmed',
+                    'nguon_dat'                 => $data['nguon_dat'] ?? $data['booking_source'] ?? 'hotline',
+                ], $serviceIds);
             }
 
-            $durationMin = $serviceModel->getDurationByIds($serviceIds);
-            if ($durationMin < 15) {
-                $durationMin = 30;
-            }
-            $start = new \DateTime($data['start_time']);
-            $end = clone $start;
-            $end->modify('+' . $durationMin . ' minutes');
-
-            $ids[] = $this->createManual([
-                'ma_khach_hang'             => $data['ma_khach_hang'] ?? $data['client_id'] ?? null,
-                'ma_nhan_vien'              => $employeeId,
-                'thoi_gian_bat_dau'         => $data['thoi_gian_bat_dau'] ?? $data['start_time'],
-                'thoi_gian_ket_thuc_du_kien' => $end->format('Y-m-d H:i:s'),
-                'trang_thai'                => $data['trang_thai'] ?? $data['status'] ?? 'confirmed',
-                'nguon_dat'                 => $data['nguon_dat'] ?? $data['booking_source'] ?? 'hotline',
-            ], $serviceIds);
+            $this->db->commit();
+            return $ids;
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
         }
-
-        return $ids;
     }
 
     public function createManual(array $data, array $serviceIds): int
     {
         $this->db->beginTransaction();
         try {
-            $stmt = $this->db->prepare(
-                'INSERT INTO lich_hen (ngay_tao, ma_khach_hang, ma_nhan_vien, thoi_gian_bat_dau, thoi_gian_ket_thuc_du_kien, trang_thai, nguon_dat)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)'
-            );
-            $stmt->execute([
-                date('Y-m-d H:i'),
-                $data['ma_khach_hang'],
-                $data['ma_nhan_vien'],
-                $data['thoi_gian_bat_dau'],
-                $data['thoi_gian_ket_thuc_du_kien'],
-                $data['trang_thai'] ?? 'confirmed',
-                $data['nguon_dat'] ?? 'hotline',
-            ]);
-            $id = (int) $this->db->lastInsertId();
-            $book = $this->db->prepare('INSERT INTO dich_vu_dat (ma_lich_hen, ma_dich_vu) VALUES (?, ?)');
-            foreach ($serviceIds as $sid) {
-                $book->execute([$id, $sid]);
-            }
+            $id = $this->insertManualWithLock($data, $serviceIds);
             $this->db->commit();
-
             return $id;
         } catch (Exception $e) {
             $this->db->rollBack();
@@ -319,17 +388,47 @@ class Appointment extends Model
         }
     }
 
-    public function queueReminder(int $appointmentId, string $channel, string $scheduledAt, string $message): void
+    /**
+     * HÀM BỔ TRỢ: Tách biệt logic Insert để tái sử dụng cho cả đặt đơn lẫn đặt nhóm mà không bị lỗi lặp Transaction
+     */
+    private function insertManualWithLock(array $data, array $serviceIds): int
     {
-        // Bảng reminder_queue đã bị xóa, method này không còn cần thiết
+        if ($this->hasScheduleConflict(
+            (int) $data['ma_nhan_vien'],
+            $data['thoi_gian_bat_dau'],
+            $data['thoi_gian_ket_thuc_du_kien'],
+            null,
+            true // Bật lock chống trùng lịch
+        )) {
+            throw new Exception('Thợ đã có lịch trùng khung giờ này. Vui lòng chọn giờ hoặc thợ khác.');
+        }
+
+        $stmt = $this->db->prepare(
+            'INSERT INTO lich_hen (ngay_tao, ma_khach_hang, ma_nhan_vien, thoi_gian_bat_dau, thoi_gian_ket_thuc_du_kien, trang_thai, nguon_dat)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            date('Y-m-d H:i'),
+            $data['ma_khach_hang'],
+            $data['ma_nhan_vien'],
+            $data['thoi_gian_bat_dau'],
+            $data['thoi_gian_ket_thuc_du_kien'],
+            $data['trang_thai'] ?? 'confirmed',
+            $data['nguon_dat'] ?? 'hotline',
+        ]);
+        
+        $id = (int) $this->db->lastInsertId();
+        
+        $book = $this->db->prepare('INSERT INTO dich_vu_dat (ma_lich_hen, ma_dich_vu) VALUES (?, ?)');
+        foreach ($serviceIds as $sid) {
+            $book->execute([$id, $sid]);
+        }
+
+        return $id;
     }
 
-    public function getPendingReminders(): array
-    {
-        return [];
-    }
+    // TỐI ƯU: Đã dọn dẹp các hàm rác reminder không sử dụng
 
-    /** Lấy chi tiết 1 lịch hẹn theo ID */
     public function getById(int $id): ?array
     {
         $stmt = $this->db->prepare(
@@ -337,14 +436,13 @@ class Appointment extends Model
                     e.ten AS emp_fname, e.ho_dem AS emp_lname
              FROM lich_hen a
              INNER JOIN khach_hang c ON a.ma_khach_hang = c.ma_khach_hang
-             INNER JOIN nhan_vien e ON a.ma_nhan_vien = e.ma_nhan_vien
+             LEFT JOIN nhan_vien e ON a.ma_nhan_vien = e.ma_nhan_vien
              WHERE a.ma_lich_hen = ?'
         );
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
     }
 
-    /** Cập nhật thời gian lịch hẹn */
     public function updateTime(int $id, string $startTime, string $endTime = ''): void
     {
         if ($endTime === '') {
@@ -360,7 +458,6 @@ class Appointment extends Model
         }
     }
 
-    /** Cập nhật nhân viên phụ trách */
     public function updateEmployee(int $id, int $employeeId): void
     {
         $stmt = $this->db->prepare(
@@ -369,7 +466,6 @@ class Appointment extends Model
         $stmt->execute([$employeeId, $id]);
     }
 
-    /** Đếm lịch hẹn hôm nay (chưa check-out, chưa hủy) — dùng cho badge nav */
     public function countToday(): int
     {
         $stmt = $this->db->prepare(
@@ -380,7 +476,9 @@ class Appointment extends Model
         );
         $stmt->execute();
         return (int) $stmt->fetchColumn();
-    }    public function getBookedServicesDetailed(int $appointmentId): array
+    }
+
+    public function getBookedServicesDetailed(int $appointmentId): array
     {
         $stmt = $this->db->prepare(
             'SELECT s.ma_dich_vu, s.ten_dich_vu, s.gia, s.thoi_luong
@@ -401,7 +499,7 @@ class Appointment extends Model
                     e.ma_nhan_vien, e.ten AS emp_fname, e.ho_dem AS emp_lname
              FROM lich_hen a
              INNER JOIN khach_hang c ON a.ma_khach_hang = c.ma_khach_hang
-             INNER JOIN nhan_vien e ON a.ma_nhan_vien = e.ma_nhan_vien
+             LEFT JOIN nhan_vien e ON a.ma_nhan_vien = e.ma_nhan_vien
              WHERE a.ma_lich_hen = ?'
         );
         $stmt->execute([$appointmentId]);
@@ -412,7 +510,7 @@ class Appointment extends Model
 
         $services = $this->getBookedServicesDetailed($appointmentId);
         $lines = [];
-        $empName = strtoupper(trim($row['emp_fname'] . ' ' . $row['emp_lname']));
+        $empName = mb_strtoupper(trim($row['emp_fname'] . ' ' . $row['emp_lname']), 'UTF-8');
         foreach ($services as $s) {
             $lines[] = [
                 'type' => 'service',
@@ -420,7 +518,7 @@ class Appointment extends Model
                 'name' => $s['ten_dich_vu'],
                 'unit_price' => (float) $s['gia'],
                 'qty' => 1,
-                'ma_nhan_vien' => (int) $row['ma_nhan_vien'],
+                'employee_id' => (int) $row['ma_nhan_vien'],
                 'employee_name' => $empName,
             ];
         }

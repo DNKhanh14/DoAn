@@ -36,7 +36,8 @@ class Report extends Model
     {
         $stmt = $this->db->prepare(
             "SELECT ten, SUM(so_luong) AS qty, SUM(tong_dong) AS revenue
-             FROM chi_tiet_don_hang WHERE loai = 'service'
+             FROM chi_tiet_don_hang
+             WHERE ma_dich_vu IS NOT NULL
              GROUP BY ten ORDER BY revenue DESC LIMIT ?"
         );
         $stmt->bindValue(1, $limit, \PDO::PARAM_INT);
@@ -105,7 +106,9 @@ class Report extends Model
         }
 
         $stmt = $this->db->prepare(
-            "SELECT o.ma_don_hang, o.ma_don, o.ngay_tao, o.tong_truoc_giam, o.giam_gia, o.tong_cong, o.phuong_thuc_thanh_toan,
+            "SELECT o.ma_don_hang,
+                    CONCAT('HD', LPAD(o.ma_don_hang, 6, '0')) AS ma_don,
+                    o.ngay_tao, o.tong_truoc_giam, o.giam_gia, o.tong_cong, o.phuong_thuc_thanh_toan,
                     c.ten, c.ho_dem
              FROM don_hang o
              LEFT JOIN khach_hang c ON o.ma_khach_hang = c.ma_khach_hang
@@ -135,7 +138,7 @@ class Report extends Model
         }
 
         $stmt = $this->db->prepare(
-            "SELECT o.ma_don_hang, o.ma_don, o.ngay_tao, o.tong_cong, o.phuong_thuc_thanh_toan, o.ghi_chu,
+            "SELECT o.ma_don_hang, o.ngay_tao, o.tong_cong, o.phuong_thuc_thanh_toan, o.ghi_chu,
                     c.ten, c.ho_dem
              FROM don_hang o
              LEFT JOIN khach_hang c ON o.ma_khach_hang = c.ma_khach_hang
@@ -272,7 +275,7 @@ class Report extends Model
         }
 
         $stmt = $this->db->prepare(
-            'SELECT ma_san_pham, ten_san_pham, ma_sku, so_luong_ton, so_luong_toi_thieu, gia_ban, don_vi
+            'SELECT ma_san_pham, ten_san_pham, so_luong_ton, so_luong_toi_thieu, gia_ban, don_vi
              FROM san_pham
              WHERE hoat_dong = 1
              ORDER BY ten_san_pham

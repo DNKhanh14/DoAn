@@ -10,9 +10,13 @@ class Employee extends Model
 
     public function getAll(): array
     {
-        $stmt = $this->db->query('SELECT * FROM nhan_vien ORDER BY ma_nhan_vien ASC');
+        $stmt = $this->db->query(
+            'SELECT nv.*, COALESCE(cv.ten_chuc_vu, \'\') AS chuc_vu
+             FROM nhan_vien nv
+             LEFT JOIN chuc_vu_quyen cv ON nv.ma_chuc_vu = cv.ma_chuc_vu
+             ORDER BY nv.ma_nhan_vien ASC'
+        );
         $rows = $stmt->fetchAll();
-        // Loại bỏ trùng lặp theo ma_nhan_vien
         $seen = [];
         $result = [];
         foreach ($rows as $row) {
@@ -25,67 +29,141 @@ class Employee extends Model
         return $result;
     }
 
+    /**
+     * Lấy danh sách nhân viên cho trang đặt lịch khách hàng.
+     * Ưu tiên lấy thợ có chức vụ 'Thợ chính', nếu không có thì trả về tất cả.
+     */
+    public function getBarbers(): array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT nv.*,
+                    COALESCE(cv.ten_chuc_vu, '') AS chuc_vu
+             FROM nhan_vien nv
+             LEFT JOIN chuc_vu_quyen cv ON nv.ma_chuc_vu = cv.ma_chuc_vu
+             ORDER BY nv.ma_nhan_vien ASC"
+        );
+        $stmt->execute();
+        $all = $stmt->fetchAll();
+
+        // Lọc 'Thợ chính' nếu có
+        $barbers = array_values(array_filter($all, fn($e) => ($e['chuc_vu'] ?? '') === 'Thợ chính'));
+
+        // Nếu không có thợ chính → trả về tất cả để trang đặt lịch không trống
+        $rows = !empty($barbers) ? $barbers : $all;
+
+        $seen = [];
+        $result = [];
+        foreach ($rows as $row) {
+            $id = (int) $row['ma_nhan_vien'];
+            if (!isset($seen[$id])) {
+                $seen[$id] = true;
+                $result[] = $row;
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Tìm nhân viên ít lịch đặt nhất trong 30 ngày tới.
+     */
+    public function getLeastBusyBarber(): ?int
+    {
+        $stmt = $this->db->prepare(
+            "SELECT nv.ma_nhan_vien,
+                    COUNT(lh.ma_lich_hen) AS so_lich
+             FROM nhan_vien nv
+             LEFT JOIN lich_hen lh
+                ON lh.ma_nhan_vien = nv.ma_nhan_vien
+               AND lh.da_huy = 0
+               AND lh.thoi_gian_bat_dau BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY)
+             GROUP BY nv.ma_nhan_vien
+             ORDER BY so_lich ASC, nv.ma_nhan_vien ASC
+             LIMIT 1"
+        );
+        $stmt->execute();
+        $row = $stmt->fetch();
+        return $row ? (int) $row['ma_nhan_vien'] : null;
+    }
+
+    public function count(): int
+    {
+        return (int) $this->db->query('SELECT COUNT(*) FROM nhan_vien')->fetchColumn();
+    }
+
+    public function getPaginated(int $offset, int $limit): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT nv.*, COALESCE(cv.ten_chuc_vu, \'\') AS chuc_vu
+             FROM nhan_vien nv
+             LEFT JOIN chuc_vu_quyen cv ON nv.ma_chuc_vu = cv.ma_chuc_vu
+             ORDER BY nv.ma_nhan_vien ASC LIMIT ? OFFSET ?'
+        );
+        $stmt->bindValue(1, $limit, \PDO::PARAM_INT);
+        $stmt->bindValue(2, $offset, \PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
     public function find(int $id): ?array
     {
-        $stmt = $this->db->prepare('SELECT * FROM nhan_vien WHERE ma_nhan_vien = ?');
+        $stmt = $this->db->prepare(
+            'SELECT nv.*, COALESCE(cv.ten_chuc_vu, \'\') AS chuc_vu
+             FROM nhan_vien nv
+             LEFT JOIN chuc_vu_quyen cv ON nv.ma_chuc_vu = cv.ma_chuc_vu
+             WHERE nv.ma_nhan_vien = ?'
+        );
         $stmt->execute([$id]);
         $row = $stmt->fetch();
-
         return $row ?: null;
+    }
+
+    /** Tra ma_chuc_vu từ tên chức vụ */
+    private function resolveRoleId(string $tenChucVu): ?int
+    {
+        if ($tenChucVu === '') return null;
+        $stmt = $this->db->prepare('SELECT ma_chuc_vu FROM chuc_vu_quyen WHERE ten_chuc_vu = ? LIMIT 1');
+        $stmt->execute([$tenChucVu]);
+        $row = $stmt->fetch();
+        return $row ? (int) $row['ma_chuc_vu'] : null;
     }
 
     public function create(array $data): void
     {
-        if ($this->hasJobTitleColumn()) {
-            $stmt = $this->db->prepare(
-                'INSERT INTO nhan_vien (ten, ho_dem, so_dien_thoai, email, chuc_vu) VALUES (?, ?, ?, ?, ?)'
-            );
-            $stmt->execute([
-                $data['ten'],
-                $data['ho_dem'],
-                $data['so_dien_thoai'],
-                $data['email'],
-                $data['chuc_vu'] ?? null,
-            ]);
-            return;
-        }
+        // Nếu truyền tên chức vụ (string) thì resolve sang ma_chuc_vu
+        $maChucVu = isset($data['ma_chuc_vu'])
+            ? ($data['ma_chuc_vu'] ?: null)
+            : $this->resolveRoleId($data['chuc_vu'] ?? '');
 
         $stmt = $this->db->prepare(
-            'INSERT INTO nhan_vien (ten, ho_dem, so_dien_thoai, email) VALUES (?, ?, ?, ?)'
+            'INSERT INTO nhan_vien (ten, ho_dem, so_dien_thoai, email, ma_chuc_vu, luong_co_ban) VALUES (?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $data['ten'],
             $data['ho_dem'],
             $data['so_dien_thoai'],
             $data['email'],
+            $maChucVu,
+            (float) ($data['luong_co_ban'] ?? 0),
         ]);
     }
 
     public function update(int $id, array $data): void
     {
-        if ($this->hasJobTitleColumn()) {
-            $stmt = $this->db->prepare(
-                'UPDATE nhan_vien SET ten = ?, ho_dem = ?, so_dien_thoai = ?, email = ?, chuc_vu = ? WHERE ma_nhan_vien = ?'
-            );
-            $stmt->execute([
-                $data['ten'],
-                $data['ho_dem'],
-                $data['so_dien_thoai'],
-                $data['email'],
-                $data['chuc_vu'] ?? null,
-                $id,
-            ]);
-            return;
-        }
+        // Nếu truyền tên chức vụ (string) thì resolve sang ma_chuc_vu
+        $maChucVu = isset($data['ma_chuc_vu'])
+            ? ($data['ma_chuc_vu'] ?: null)
+            : $this->resolveRoleId($data['chuc_vu'] ?? '');
 
         $stmt = $this->db->prepare(
-            'UPDATE nhan_vien SET ten = ?, ho_dem = ?, so_dien_thoai = ?, email = ? WHERE ma_nhan_vien = ?'
+            'UPDATE nhan_vien SET ten = ?, ho_dem = ?, so_dien_thoai = ?, email = ?, ma_chuc_vu = ?, luong_co_ban = ? WHERE ma_nhan_vien = ?'
         );
         $stmt->execute([
             $data['ten'],
             $data['ho_dem'],
             $data['so_dien_thoai'],
             $data['email'],
+            $maChucVu,
+            (float) ($data['luong_co_ban'] ?? 0),
             $id,
         ]);
     }
@@ -96,20 +174,8 @@ class Employee extends Model
         $stmt->execute([$id]);
     }
 
-    private function hasJobTitleColumn(): bool
+    private function ensureBaseSalaryColumn(): void
     {
-        if ($this->hasJobTitleColumn === null) {
-            $stmt = $this->db->query("SHOW COLUMNS FROM nhan_vien LIKE 'chuc_vu'");
-            $exists = (bool) $stmt->fetch();
-
-            if (!$exists) {
-                // Tự động thêm cột nếu chưa có
-                $this->db->exec("ALTER TABLE nhan_vien ADD COLUMN `chuc_vu` varchar(100) DEFAULT NULL");
-            }
-
-            $this->hasJobTitleColumn = true;
-        }
-
-        return $this->hasJobTitleColumn;
+        // Không cần kiểm tra — cột đã có trong schema mới
     }
 }

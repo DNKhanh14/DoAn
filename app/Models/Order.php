@@ -20,6 +20,24 @@ class Order extends Model
         return $stmt->fetchAll();
     }
 
+    public function countAll(): int
+    {
+        return (int) $this->db->query('SELECT COUNT(*) FROM don_hang')->fetchColumn();
+    }
+
+    public function getPaginated(int $offset, int $limit): array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT o.*, c.ten, c.ho_dem FROM don_hang o
+             LEFT JOIN khach_hang c ON o.ma_khach_hang = c.ma_khach_hang
+             ORDER BY o.ngay_tao DESC LIMIT ? OFFSET ?'
+        );
+        $stmt->bindValue(1, $limit, \PDO::PARAM_INT);
+        $stmt->bindValue(2, $offset, \PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
     public function find(int $id): ?array
     {
         $stmt = $this->db->prepare(
@@ -53,13 +71,8 @@ class Order extends Model
 
     public function generateOrderCode(): string
     {
-        if (!$this->hasColumn('don_hang', 'ma_don')) {
-            return 'HD' . date('ymd') . rand(100, 999);
-        }
-
         $stmt = $this->db->query('SELECT ma_don_hang FROM don_hang ORDER BY ma_don_hang DESC LIMIT 1');
         $last = (int) ($stmt->fetchColumn() ?: 0);
-
         return 'HD' . str_pad((string) ($last + 1), 6, '0', STR_PAD_LEFT);
     }
 
@@ -67,87 +80,56 @@ class Order extends Model
     {
         $this->db->beginTransaction();
         try {
-            $hasCode = $this->hasColumn('don_hang', 'ma_don');
-            $orderCode = $order['ma_don'] ?? $this->generateOrderCode();
-
-            if ($hasCode) {
-                $stmt = $this->db->prepare(
-                    'INSERT INTO don_hang (ma_khach_hang, ma_lich_hen, tong_truoc_giam, giam_gia, tong_cong, phuong_thuc_thanh_toan, trang_thai, ghi_chu, ma_don)
-                     VALUES (?,?,?,?,?,?,?,?,?)'
-                );
-                $stmt->execute([
-                    $order['ma_khach_hang'] ?: null,
-                    $order['ma_lich_hen'] ?: null,
-                    $order['tong_truoc_giam'],
-                    $order['giam_gia'],
-                    $order['tong_cong'],
-                    $order['phuong_thuc_thanh_toan'],
-                    $order['trang_thai'] ?? 'completed',
-                    $order['ghi_chu'] ?? null,
-                    $orderCode,
-                ]);
-            } else {
-                $stmt = $this->db->prepare(
-                    'INSERT INTO don_hang (ma_khach_hang, ma_lich_hen, tong_truoc_giam, giam_gia, tong_cong, phuong_thuc_thanh_toan, trang_thai, ghi_chu)
-                     VALUES (?,?,?,?,?,?,?,?)'
-                );
-                $stmt->execute([
-                    $order['ma_khach_hang'] ?: null,
-                    $order['ma_lich_hen'] ?: null,
-                    $order['tong_truoc_giam'],
-                    $order['giam_gia'],
-                    $order['tong_cong'],
-                    $order['phuong_thuc_thanh_toan'],
-                    $order['trang_thai'] ?? 'completed',
-                    $order['ghi_chu'] ?? null,
-                ]);
-            }
+            $stmt = $this->db->prepare(
+                'INSERT INTO don_hang (ma_khach_hang, ma_lich_hen, tong_truoc_giam, giam_gia, tong_cong, phuong_thuc_thanh_toan, trang_thai, ghi_chu)
+                 VALUES (?,?,?,?,?,?,?,?)'
+            );
+            $stmt->execute([
+                $order['ma_khach_hang'] ?: null,
+                $order['ma_lich_hen'] ?: null,
+                $order['tong_truoc_giam'],
+                $order['giam_gia'],
+                $order['tong_cong'],
+                $order['phuong_thuc_thanh_toan'],
+                $order['trang_thai'] ?? 'completed',
+                $order['ghi_chu'] ?? null,
+            ]);
 
             $orderId = (int) $this->db->lastInsertId();
-            $hasEmp = $this->hasColumn('chi_tiet_don_hang', 'ma_nhan_vien');
 
-            if ($hasEmp) {
-                $itemStmt = $this->db->prepare(
-                    'INSERT INTO chi_tiet_don_hang (ma_don_hang, loai, ma_tham_chieu, ten, so_luong, don_gia, tong_dong, ma_nhan_vien, giam_gia_dong, giam_gia_phan_tram)
-                     VALUES (?,?,?,?,?,?,?,?,?,?)'
-                );
-            } else {
-                $itemStmt = $this->db->prepare(
-                    'INSERT INTO chi_tiet_don_hang (ma_don_hang, loai, ma_tham_chieu, ten, so_luong, don_gia, tong_dong)
-                     VALUES (?,?,?,?,?,?,?)'
-                );
-            }
+            $itemStmt = $this->db->prepare(
+                'INSERT INTO chi_tiet_don_hang
+                    (ma_don_hang, ma_dich_vu, ma_san_pham, ten, so_luong, don_gia, tong_dong, ma_nhan_vien, giam_gia_dong, giam_gia_phan_tram)
+                 VALUES (?,?,?,?,?,?,?,?,?,?)'
+            );
 
             $productModel = new Product();
 
             foreach ($items as $item) {
-                if ($hasEmp) {
-                    $itemStmt->execute([
-                        $orderId, $item['item_type'], $item['ref_id'], $item['item_name'],
-                        $item['quantity'], $item['unit_price'], $item['line_total'],
-                        $item['ma_nhan_vien'] ?? null,
-                        $item['line_discount'] ?? 0,
-                        !empty($item['discount_is_percent']) ? 1 : 0,
-                    ]);
-                } else {
-                    $itemStmt->execute([
-                        $orderId, $item['item_type'], $item['ref_id'], $item['item_name'],
-                        $item['quantity'], $item['unit_price'], $item['line_total'],
-                    ]);
-                }
+                $type      = $item['item_type'] ?? '';
+                $refId     = (int) ($item['ref_id'] ?? 0);
+                $maDichVu  = ($type === 'service')  ? $refId : null;
+                $maSanPham = ($type === 'product')  ? $refId : null;
 
-                if ($item['item_type'] === 'product') {
-                    $productModel->adjustStock((int) $item['ref_id'], -1 * (int) $item['quantity']);
+                $itemStmt->execute([
+                    $orderId,
+                    $maDichVu,
+                    $maSanPham,
+                    $item['item_name'],
+                    $item['quantity'],
+                    $item['unit_price'],
+                    $item['line_total'],
+                    $item['ma_nhan_vien'] ?? null,
+                    $item['line_discount'] ?? 0,
+                    !empty($item['discount_is_percent']) ? 1 : 0,
+                ]);
+
+                if ($maSanPham) {
+                    $productModel->adjustStock($maSanPham, -1 * (int) $item['quantity']);
                 }
             }
-
-            if (!empty($order['ma_khach_hang']) && !empty($order['diem_tich_luy'])) {
-                (new Client())->addLoyaltyPoints((int) $order['ma_khach_hang'], (int) $order['diem_tich_luy']);
-            }
-
 
             $this->db->commit();
-
             return $orderId;
         } catch (Exception $e) {
             $this->db->rollBack();
@@ -161,8 +143,8 @@ class Order extends Model
             return [];
         }
         $stmt = $this->db->prepare(
-            'SELECT o.*, 
-                    (SELECT COUNT(*) FROM chi_tiet_don_hang oi WHERE oi.ma_don_hang = o.ma_don_hang AND oi.loai = \'service\') AS so_dich_vu
+            'SELECT o.*,
+                    (SELECT COUNT(*) FROM chi_tiet_don_hang oi WHERE oi.ma_don_hang = o.ma_don_hang AND oi.ma_dich_vu IS NOT NULL) AS so_dich_vu
              FROM don_hang o
              WHERE o.ma_khach_hang = ?
              ORDER BY o.ngay_tao DESC
@@ -182,11 +164,41 @@ class Order extends Model
         $stmt = $this->db->prepare(
             "SELECT COUNT(DISTINCT o.ma_don_hang)
              FROM don_hang o
-             INNER JOIN chi_tiet_don_hang oi ON oi.ma_don_hang = o.ma_don_hang AND oi.loai = 'service'
+             INNER JOIN chi_tiet_don_hang oi ON oi.ma_don_hang = o.ma_don_hang AND oi.ma_dich_vu IS NOT NULL
              WHERE o.ma_khach_hang = ? AND o.trang_thai = 'completed'"
         );
         $stmt->execute([$clientId]);
         return (int) $stmt->fetchColumn();
+    }
+
+    public function delete(int $id): bool
+    {
+        $this->db->beginTransaction();
+        try {
+            // Hoàn kho sản phẩm trước khi xóa
+            $items = $this->getItems($id);
+            $productModel = new Product();
+            foreach ($items as $item) {
+                if (($item['ma_san_pham'] ?? null)) {
+                    $productModel->adjustStock((int) $item['ma_san_pham'], (int) $item['so_luong']);
+                }
+            }
+            $this->db->prepare('DELETE FROM chi_tiet_don_hang WHERE ma_don_hang = ?')->execute([$id]);
+            $this->db->prepare('DELETE FROM don_hang WHERE ma_don_hang = ?')->execute([$id]);
+            $this->db->commit();
+            return true;
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            return false;
+        }
+    }
+
+    public function updateNote(int $id, string $note, string $paymentMethod): bool
+    {
+        $stmt = $this->db->prepare(
+            'UPDATE don_hang SET ghi_chu = ?, phuong_thuc_thanh_toan = ? WHERE ma_don_hang = ?'
+        );
+        return $stmt->execute([trim($note), $paymentMethod, $id]);
     }
 
     private function hasColumn(string $table, string $column): bool

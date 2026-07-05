@@ -11,6 +11,40 @@ class Product extends Model
         return $this->db->query('SELECT * FROM san_pham ORDER BY ten_san_pham')->fetchAll();
     }
 
+    public function count(string $q = ''): int
+    {
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $stmt = $this->db->prepare('SELECT COUNT(*) FROM san_pham WHERE ten_san_pham LIKE ?');
+            $stmt->execute([$like]);
+        } else {
+            $stmt = $this->db->query('SELECT COUNT(*) FROM san_pham');
+        }
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function getPaginated(int $offset, int $limit, string $q = ''): array
+    {
+        if ($q !== '') {
+            $like = '%' . $q . '%';
+            $stmt = $this->db->prepare(
+                'SELECT * FROM san_pham WHERE ten_san_pham LIKE ?
+                 ORDER BY ten_san_pham LIMIT ? OFFSET ?'
+            );
+            $stmt->bindValue(1, $like);
+            $stmt->bindValue(2, $limit, \PDO::PARAM_INT);
+            $stmt->bindValue(3, $offset, \PDO::PARAM_INT);
+        } else {
+            $stmt = $this->db->prepare(
+                'SELECT * FROM san_pham ORDER BY ten_san_pham LIMIT ? OFFSET ?'
+            );
+            $stmt->bindValue(1, $limit, \PDO::PARAM_INT);
+            $stmt->bindValue(2, $offset, \PDO::PARAM_INT);
+        }
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
     public function search(string $q, int $limit = 100): array
     {
         $q = trim($q);
@@ -19,11 +53,10 @@ class Product extends Model
         }
         $like = '%' . $q . '%';
         $stmt = $this->db->prepare(
-            'SELECT * FROM san_pham WHERE ten_san_pham LIKE ? OR ma_sku LIKE ? ORDER BY ten_san_pham LIMIT ?'
+            'SELECT * FROM san_pham WHERE ten_san_pham LIKE ? ORDER BY ten_san_pham LIMIT ?'
         );
         $stmt->bindValue(1, $like);
-        $stmt->bindValue(2, $like);
-        $stmt->bindValue(3, $limit, \PDO::PARAM_INT);
+        $stmt->bindValue(2, $limit, \PDO::PARAM_INT);
         $stmt->execute();
 
         return $stmt->fetchAll();
@@ -44,9 +77,7 @@ class Product extends Model
 
     public function save(array $data, ?int $id = null): void
     {
-        // Hỗ trợ cả key tiếng Việt (từ controller mới) và key tiếng Anh (legacy)
         $tenSanPham   = $data['ten_san_pham']         ?? $data['product_name']  ?? '';
-        $maSku        = $data['ma_sku']               ?? $data['sku']           ?? '';
         $donVi        = $data['don_vi']               ?? $data['unit']          ?? 'cai';
         $giaBan       = $data['gia_ban']              ?? $data['sale_price']    ?? 0;
         $giaNhap      = $data['gia_nhap']             ?? $data['cost_price']    ?? 0;
@@ -56,15 +87,15 @@ class Product extends Model
 
         if ($id) {
             $stmt = $this->db->prepare(
-                'UPDATE san_pham SET ten_san_pham=?, ma_sku=?, don_vi=?, gia_ban=?, gia_nhap=?, so_luong_ton=?, so_luong_toi_thieu=?, hoat_dong=? WHERE ma_san_pham=?'
+                'UPDATE san_pham SET ten_san_pham=?, don_vi=?, gia_ban=?, gia_nhap=?, so_luong_ton=?, so_luong_toi_thieu=?, hoat_dong=? WHERE ma_san_pham=?'
             );
-            $stmt->execute([$tenSanPham, $maSku, $donVi, $giaBan, $giaNhap, $soLuongTon, $soLuongMin, $hoatDong, $id]);
+            $stmt->execute([$tenSanPham, $donVi, $giaBan, $giaNhap, $soLuongTon, $soLuongMin, $hoatDong, $id]);
         } else {
             $stmt = $this->db->prepare(
-                'INSERT INTO san_pham (ten_san_pham, ma_sku, don_vi, gia_ban, gia_nhap, so_luong_ton, so_luong_toi_thieu, hoat_dong)
-                 VALUES (?,?,?,?,?,?,?,?)'
+                'INSERT INTO san_pham (ten_san_pham, don_vi, gia_ban, gia_nhap, so_luong_ton, so_luong_toi_thieu, hoat_dong)
+                 VALUES (?,?,?,?,?,?,?)'
             );
-            $stmt->execute([$tenSanPham, $maSku, $donVi, $giaBan, $giaNhap, $soLuongTon, $soLuongMin, $hoatDong]);
+            $stmt->execute([$tenSanPham, $donVi, $giaBan, $giaNhap, $soLuongTon, $soLuongMin, $hoatDong]);
         }
     }
 

@@ -5,8 +5,6 @@
 $router->get('login', 'AuthController@login');
 $router->post('login', 'AuthController@login');
 $router->get('logout', 'AuthController@logout');
-$router->get('register', 'AuthController@register');
-$router->post('register', 'AuthController@register');
 $router->get('forgot-password', 'AuthController@forgotPassword');
 $router->post('forgot-password', 'AuthController@forgotPassword');
 $router->get('', 'DashboardController@index');
@@ -31,9 +29,13 @@ $router->get('crm/birthdays', 'CrmController@birthdays');
 // POS (Thu ngân)
 $router->get('pos', 'PosController@index');
 $router->get('pos/orders', 'PosController@orders');
+$router->get('pos/detail', 'PosController@detail');
 $router->get('pos/print', 'PosController@print');
 $router->post('ajax/pos', 'PosController@ajax');
 $router->get('ajax/pos', 'PosController@ajax');
+$router->post('pos/delete', 'PosController@deleteOrder');
+$router->get('pos/edit', 'PosController@editOrder');
+$router->post('pos/edit', 'PosController@editOrder');
 
 // Kho
 $router->get('inventory', 'InventoryController@index');
@@ -65,3 +67,14 @@ $router->get('employees/commission', 'EmployeesController@commission');
 $router->post('employees/commission', 'EmployeesController@commission');
 
 $router->post('ajax/appointments', 'BookingController@ajax');
+
+// Quản lý tài khoản & phân quyền
+$router->get('accounts', 'AccountsController@index');
+$router->post('accounts', 'AccountsController@index');
+$router->get('accounts/create', 'AccountsController@create');
+$router->post('accounts/create', 'AccountsController@create');
+$router->get('accounts/edit', 'AccountsController@edit');
+$router->post('accounts/edit', 'AccountsController@edit');
+$router->get('accounts/permissions', 'AccountsController@permissions');
+$router->post('accounts/permissions', 'AccountsController@permissions');
+$router->post('ajax/accounts', 'AccountsController@ajax');

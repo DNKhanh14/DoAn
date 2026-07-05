@@ -3,7 +3,6 @@
 namespace App\Controllers\Admin;
 
 use App\Models\Expense;
-use App\Models\Hr;
 use App\Models\Order;
 use App\Models\Report;
 
@@ -11,6 +10,7 @@ class ReportsController extends AdminController
 {
     public function index(): void
     {
+        $this->requirePermission('reports');
         $pageTitle = 'Báo cáo';
         $from = $_GET['from'] ?? date('Y-m-d');
         $to = $_GET['to'] ?? date('Y-m-d');
@@ -23,6 +23,7 @@ class ReportsController extends AdminController
         }
 
         if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['add_expense'])) {
+            $this->requireWritePermission();
             $expenseModel->add(
                 test_input($_POST['category']),
                 parse_vnd_input($_POST['amount'] ?? 0),
@@ -94,6 +95,7 @@ class ReportsController extends AdminController
             'cfType' => $cfType,
             'cfPayment' => $cfPayment,
             'cashflowRows' => $cashflowRows,
+            'readOnly' => in_array($_SESSION['admin_role_barbershop'] ?? '', ['Lễ tân', 'Thợ chính', 'Thợ phụ'], true),
         ]);
     }
 
@@ -109,25 +111,24 @@ class ReportsController extends AdminController
         }
 
         $items = $orderModel->getItems($id);
-        $hr = new Hr();
 
-        foreach ($items as &$item) {
-            $item['commission'] = $hr->commissionForItem($item);
-        }
-        unset($item);
-
-        $code = $order['ma_don'] ?? ('HD' . str_pad((string) $order['ma_don_hang'], 6, '0', STR_PAD_LEFT));
+        $code = '#' . str_pad((string) $order['ma_don_hang'], 6, '0', STR_PAD_LEFT);
         $pageTitle = 'Chi tiết hoá đơn #' . $code;
 
-        $this->adminView('reports/order', [
-            'pageTitle' => $pageTitle,
-            'order' => $order,
-            'items' => $items,
-            'orderCode' => $code,
+        // Xây dựng URL quay lại báo cáo (giữ nguyên tab + khoảng thời gian)
+        $backUrl = admin_route('reports', [
+            'tab'  => $_GET['tab'] ?? 'revenue',
             'from' => $_GET['from'] ?? date('Y-m-d', strtotime($order['ngay_tao'])),
-            'to' => $_GET['to'] ?? date('Y-m-d', strtotime($order['ngay_tao'])),
-            'tab' => $_GET['tab'] ?? 'revenue',
+            'to'   => $_GET['to']   ?? date('Y-m-d', strtotime($order['ngay_tao'])),
         ]);
+
+        // Dùng chung view pos/detail, truyền thêm backUrl để override nút Quay lại
+        $this->adminView('pos/detail', [
+            'pageTitle' => $pageTitle,
+            'order'     => $order,
+            'items'     => $items,
+            'backUrl'   => $backUrl,
+        ], true);
     }
 
     /** @param array<int, array<string, mixed>> $incomeTx */
@@ -137,7 +138,7 @@ class ReportsController extends AdminController
         $rows = [];
         foreach ($incomeTx as $tx) {
             $cust = trim(($tx['ten'] ?? '') . ' ' . ($tx['ho_dem'] ?? ''));
-            $code = $tx['ma_don'] ?? ('HD' . str_pad((string) $tx['ma_don_hang'], 6, '0', STR_PAD_LEFT));
+            $code = '#' . str_pad((string) $tx['ma_don_hang'], 6, '0', STR_PAD_LEFT);
             $methodKey = $tx['phuong_thuc_thanh_toan'] ?? 'cash';
             $rows[] = [
                 'type' => 'THU',
@@ -149,12 +150,12 @@ class ReportsController extends AdminController
                 'reason' => 'Thanh toán hóa đơn #' . $code,
                 'method' => payment_method_label($methodKey),
                 'method_key' => $methodKey,
-                'amount' => (float) $tx['total'],
+                'amount' => (float) ($tx['tong_cong'] ?? $tx['total'] ?? 0),
                 'is_income' => true,
             ];
         }
         foreach ($expenseTx as $ex) {
-            $note = (string) ($ex['note'] ?? '');
+            $note = (string) ($ex['ghi_chu'] ?? '');
             $methodKey = 'cash';
             if (preg_match('/\[pm:([a-z_]+)\]/', $note, $m)) {
                 $methodKey = $m[1];
@@ -169,11 +170,11 @@ class ReportsController extends AdminController
                 'code' => 'CP' . str_pad((string) $ex['ma_chi_phi'], 5, '0', STR_PAD_LEFT),
                 'order_id' => 0,
                 'person' => $person,
-                'category' => $ex['category'],
-                'reason' => preg_replace('/\s*\[pm:[a-z_]+\]\s*$/', '', $note) ?: $ex['category'],
+                'category' => $ex['danh_muc'] ?? '',
+                'reason' => preg_replace('/\s*\[pm:[a-z_]+\]\s*$/', '', $note) ?: ($ex['danh_muc'] ?? ''),
                 'method' => payment_method_label($methodKey),
                 'method_key' => $methodKey,
-                'amount' => (float) $ex['amount'],
+                'amount' => (float) ($ex['so_tien'] ?? 0),
                 'is_income' => false,
             ];
         }

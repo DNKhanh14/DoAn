@@ -95,7 +95,7 @@ $cfPayment = $cfPayment ?? '';
                                 if ($cust === '') {
                                     $cust = 'Khách lẻ';
                                 }
-                                $code = $o['ma_don'] ?? ('HD' . str_pad((string) $o['ma_don_hang'], 6, '0', STR_PAD_LEFT));
+                                $code = '#' . $o['ma_don_hang'];
                                 $subtotal = (float) ($o['subtotal'] ?? $o['tong_cong']);
                                 $discount = (float) ($o['giam_gia'] ?? 0);
                                 $paid = (float) $o['tong_cong'];
@@ -128,37 +128,44 @@ $cfPayment = $cfPayment ?? '';
                 <table class="table easy-table">
                     <thead>
                         <tr>
-                            <th>Nhóm nhân viên</th>
+                           
                             <th>Tên nhân viên</th>
-                            <th class="text-right">Hoa hồng làm dịch vụ</th>
-                            <th class="text-right">Tổng</th>
+                            <th class="text-right">Doanh thu dịch vụ</th>
+                            <th class="text-right">Hoa hồng ước tính</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php
-                        $activeStaff = array_filter($staffCommissions ?? [], fn($r) => (float) ($r['commission_est'] ?? 0) > 0);
-                        if (empty($activeStaff)): ?>
-                            <tr><td colspan="5" class="text-center text-muted py-4">Chưa có hoa hồng trong kỳ (cần gán nhân viên khi thanh toán)</td></tr>
+                        <?php if (empty($staffCommissions)): ?>
+                            <tr><td colspan="5" class="text-center text-muted py-4">Chưa có dữ liệu nhân viên</td></tr>
                         <?php else: ?>
-                            <?php foreach ($activeStaff as $row):
-                                $name = htmlspecialchars($row['ten'] . ' ' . $row['ho_dem']);
-                                $comm = (float) ($row['commission_est'] ?? 0);
-                                $month = substr($from, 0, 7);
+                            <?php foreach ($staffCommissions as $row):
+                                $name   = htmlspecialchars(trim($row['ten'] . ' ' . $row['ho_dem']));
+                                $comm   = (float) ($row['commission_est'] ?? 0);
+                                $svcRev = (float) ($row['service_revenue'] ?? 0);
+                                $month  = substr($from, 0, 7);
                             ?>
                             <tr>
-                                <td>BARBER</td>
-                                <td><a class="easy-link" href="<?= admin_route('hr/detail', ['ma_nhan_vien' => $row['ma_nhan_vien'], 'month' => $month, 'tab' => 'commission']) ?>"><?= strtoupper($name) ?></a></td>
-                                <td class="text-right"><?= format_vnd($comm) ?></td>
-                                <td class="text-right"><?= format_vnd($comm) ?></td>
+                                
+                                <td>
+                                    <a class="easy-link" href="<?= admin_route('hr/detail', ['employee_id' => $row['ma_nhan_vien'], 'month' => $month, 'tab' => 'commission']) ?>">
+                                        <?= mb_strtoupper($name, 'UTF-8') ?>
+                                    </a>
+                                </td>
+                                <td class="text-right"><?= format_vnd($svcRev) ?></td>
+                                <td class="text-right <?= $comm > 0 ? 'text-success font-weight-bold' : 'text-muted' ?>">
+                                    <?= $comm > 0 ? format_vnd($comm) : '—' ?>
+                                </td>
                                 <td class="text-right">
-                                    <a class="easy-link small" href="<?= admin_route('hr/detail', ['ma_nhan_vien' => $row['ma_nhan_vien'], 'month' => $month, 'tab' => 'commission']) ?>">Xem chi tiết</a>
+                                    <a class="easy-link small" href="<?= admin_route('hr/detail', ['employee_id' => $row['ma_nhan_vien'], 'month' => $month, 'tab' => 'commission']) ?>">
+                                        Xem chi tiết
+                                    </a>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
                             <tr class="reports-total-row">
-                                <td colspan="2"><strong>Tổng</strong></td>
-                                <td class="text-right"><strong><?= format_vnd($staffTotal ?? 0) ?></strong></td>
+                                <td colspan="2"><strong>Tổng cộng</strong></td>
+                                <td class="text-right"><strong><?= format_vnd(array_sum(array_column($staffCommissions, 'service_revenue'))) ?></strong></td>
                                 <td class="text-right"><strong><?= format_vnd($staffTotal ?? 0) ?></strong></td>
                                 <td></td>
                             </tr>
@@ -166,6 +173,13 @@ $cfPayment = $cfPayment ?? '';
                     </tbody>
                 </table>
             </div>
+            <?php if (!empty($staffCommissions) && array_sum(array_column($staffCommissions, 'commission_est')) == 0): ?>
+                <p class="text-muted small px-3 pb-3 mb-0">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Hoa hồng bằng 0 do chưa thiết lập tỉ lệ hoa hồng hoặc chưa gán nhân viên vào hóa đơn.
+                    <a class="easy-link" href="<?= admin_route('employees/commission') ?>">Thiết lập hoa hồng</a>
+                </p>
+            <?php endif; ?>
         </div>
 
     <?php elseif ($tab === 'customers'): ?>
@@ -381,10 +395,15 @@ $cfPayment = $cfPayment ?? '';
 
         <div class="modal fade" id="modalThemChiPhi" tabindex="-1">
             <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Thêm chi phí</h5>
-                        <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                <div class="modal-content" style="border-radius:12px; overflow:hidden; border:none">
+                    <div class="modal-header" style="background:linear-gradient(135deg, #e74a3b, #f06048); border:none; padding:20px 24px">
+                        <div class="d-flex align-items-center">
+                            <div style="width:36px; height:36px; border-radius:8px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; margin-right:12px">
+                                <i class="fas fa-file-invoice-dollar" style="color:#fff; font-size:15px"></i>
+                            </div>
+                            <h5 class="modal-title mb-0" style="color:#fff; font-weight:600">Thêm chi phí</h5>
+                        </div>
+                        <button type="button" class="close" data-dismiss="modal" style="color:#fff; opacity:0.8; text-shadow:none"><span>&times;</span></button>
                     </div>
                     <form method="post" action="index.php">
                         <input type="hidden" name="route" value="reports">
@@ -393,10 +412,12 @@ $cfPayment = $cfPayment ?? '';
                         <input type="hidden" name="to" value="<?= htmlspecialchars($to) ?>">
                         <input type="hidden" name="cf_type" value="<?= htmlspecialchars($cfType) ?>">
                         <input type="hidden" name="cf_payment" value="<?= htmlspecialchars($cfPayment) ?>">
-                        <div class="modal-body">
+                        <div class="modal-body" style="padding:24px">
                             <div class="form-group">
-                                <label>Danh mục</label>
-                                <input name="category" class="form-control" list="expenseCategoryList" placeholder="VD: Tiền điện, Lương..." required>
+                                <label class="small font-weight-bold text-muted" style="text-transform:uppercase; letter-spacing:0.5px">Danh mục <span class="text-danger">*</span></label>
+                                <input name="category" class="form-control mt-1" list="expenseCategoryList"
+                                       placeholder="VD: Tiền điện, Lương..." required
+                                       style="border-radius:8px; height:42px; border:1px solid #e2e8f0">
                                 <datalist id="expenseCategoryList">
                                     <option value="Thanh toán lương">
                                     <option value="Tạm ứng lương">
@@ -407,21 +428,28 @@ $cfPayment = $cfPayment ?? '';
                                 </datalist>
                             </div>
                             <div class="form-group">
-                                <label>Số tiền</label>
-                                <input name="amount" type="text" inputmode="numeric" class="form-control money-input" required placeholder="VD: 100.000">
+                                <label class="small font-weight-bold text-muted" style="text-transform:uppercase; letter-spacing:0.5px">Số tiền <span class="text-danger">*</span></label>
+                                <input name="amount" type="text" inputmode="numeric" class="form-control money-input mt-1"
+                                       required placeholder="VD: 100.000"
+                                       style="border-radius:8px; height:42px; border:1px solid #e2e8f0">
                             </div>
                             <div class="form-group">
-                                <label>Ngày</label>
-                                <input name="expense_date" type="date" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                                <label class="small font-weight-bold text-muted" style="text-transform:uppercase; letter-spacing:0.5px">Ngày <span class="text-danger">*</span></label>
+                                <input name="expense_date" type="date" class="form-control mt-1"
+                                       value="<?= date('Y-m-d') ?>" required
+                                       style="border-radius:8px; height:42px; border:1px solid #e2e8f0">
                             </div>
-                            <div class="form-group">
-                                <label>Ghi chú</label>
-                                <input name="note" class="form-control" placeholder="Mô tả chi phí">
+                            <div class="form-group mb-0">
+                                <label class="small font-weight-bold text-muted" style="text-transform:uppercase; letter-spacing:0.5px">Ghi chú</label>
+                                <input name="note" class="form-control mt-1" placeholder="Mô tả chi phí"
+                                       style="border-radius:8px; height:42px; border:1px solid #e2e8f0">
                             </div>
                         </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-dismiss="modal">Huỷ</button>
-                            <button type="submit" class="btn btn-primary">Lưu chi phí</button>
+                        <div class="modal-footer" style="padding:16px 24px; background:#f8fafc; border-top:1px solid #e2e8f0">
+                            <button type="button" class="btn btn-light px-4" data-dismiss="modal" style="border-radius:8px">Huỷ</button>
+                            <button type="submit" class="btn btn-danger px-4" style="border-radius:8px">
+                                <i class="fas fa-plus mr-1"></i>Lưu chi phí
+                            </button>
                         </div>
                     </form>
                 </div>

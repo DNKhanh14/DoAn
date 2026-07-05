@@ -156,11 +156,11 @@ $tabs = [
                             <?php else: ?>
                                 <?php foreach ($bonusPenaltyRecords as $row): ?>
                                 <tr>
-                                    <td><?= date('d/m/Y', strtotime($row['record_date'])) ?></td>
-                                    <td><?= $row['record_type'] === 'penalty' ? 'Phạt' : 'Thưởng' ?></td>
-                                    <td><?= htmlspecialchars($row['category']) ?></td>
-                                    <td class="text-right"><?= format_vnd($row['amount']) ?></td>
-                                    <td><?= htmlspecialchars($row['note'] ?? '') ?></td>
+                                    <td><?= date('d/m/Y', strtotime($row['ngay_ghi'])) ?></td>
+                                    <td><?= ($row['loai_ghi'] ?? '') === 'penalty' ? 'Phạt' : 'Thưởng' ?></td>
+                                    <td><?= htmlspecialchars($row['danh_muc'] ?? '') ?></td>
+                                    <td class="text-right"><?= format_vnd($row['so_tien'] ?? 0) ?></td>
+                                    <td><?= htmlspecialchars($row['ghi_chu'] ?? '') ?></td>
                                 </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -183,11 +183,11 @@ $tabs = [
                             <?php else: ?>
                                 <?php foreach ($paymentRecords as $row): ?>
                                 <tr>
-                                    <td><?= date('d/m/Y', strtotime($row['payment_date'])) ?></td>
-                                    <td><?= htmlspecialchars(\App\Models\Hr::paymentTypeLabel($row['payment_type'])) ?></td>
-                                    <td><?= htmlspecialchars(\App\Models\Hr::paymentMethodLabel($row['payment_method'])) ?></td>
-                                    <td class="text-right"><?= format_vnd($row['amount']) ?></td>
-                                    <td><?= htmlspecialchars($row['note'] ?? '') ?></td>
+                                    <td><?= date('d/m/Y', strtotime($row['ngay_thanh_toan'])) ?></td>
+                                    <td><?= htmlspecialchars(\App\Models\Hr::paymentTypeLabel($row['loai_thanh_toan'] ?? '')) ?></td>
+                                    <td><?= htmlspecialchars(\App\Models\Hr::paymentMethodLabel($row['phuong_thuc'] ?? '')) ?></td>
+                                    <td class="text-right"><?= format_vnd($row['so_tien'] ?? 0) ?></td>
+                                    <td><?= htmlspecialchars($row['ghi_chu'] ?? '') ?></td>
                                 </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -209,14 +209,19 @@ $tabs = [
                                 <tr><td colspan="5" class="text-center py-5 text-muted"><i class="fas fa-inbox fa-2x d-block mb-2"></i>Trống — cần gán nhân viên khi thanh toán ở Thu ngân</td></tr>
                             <?php else: ?>
                                 <?php foreach ($commissionRecords as $row):
-                                    $code = $row['order_code'] ?? ('HD' . str_pad((string) $row['order_id'], 6, '0', STR_PAD_LEFT));
+                                    $orderId  = (int) ($row['ma_don_hang'] ?? 0);
+                                    $code     = $row['ma_don'] ?? ('HD' . str_pad((string) $orderId, 6, '0', STR_PAD_LEFT));
                                 ?>
                                 <tr>
-                                    <td><?= date('d/m/Y H:i', strtotime($row['created_at'])) ?></td>
-                                    <td><a class="easy-link" href="<?= admin_route('reports/order', ['id' => $row['order_id'], 'from' => $from, 'to' => $to, 'tab' => 'staff']) ?>"><?= htmlspecialchars($code) ?></a></td>
-                                    <td><?= htmlspecialchars($row['item_name']) ?></td>
-                                    <td class="text-right"><?= format_vnd($row['line_total']) ?></td>
-                                    <td class="text-right"><?= format_vnd($row['commission']) ?></td>
+                                    <td><?= date('d/m/Y H:i', strtotime($row['ngay_tao'])) ?></td>
+                                    <td>
+                                        <a class="easy-link" href="<?= admin_route('pos/detail', ['id' => $orderId]) ?>">
+                                            <?= htmlspecialchars($code) ?>
+                                        </a>
+                                    </td>
+                                    <td><?= htmlspecialchars($row['ten'] ?? '') ?></td>
+                                    <td class="text-right"><?= format_vnd($row['tong_dong'] ?? 0) ?></td>
+                                    <td class="text-right font-weight-bold" style="color:#1cc88a"><?= format_vnd($row['commission'] ?? 0) ?></td>
                                 </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>

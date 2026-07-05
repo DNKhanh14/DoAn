@@ -6,7 +6,7 @@ return [
         'name' => 'barbershop',
         'user' => 'root',
         'pass' => '',
-        'charset' => 'utf8',
+        'charset' => 'utf8mb4',
     ],
     'app_name' => 'Barbershop Website',
 ];
